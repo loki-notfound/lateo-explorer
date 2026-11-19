@@ -99,7 +99,8 @@ final class ChainStore
 
     /**
      * Undo the chain above $forkHeight in one transaction: copy the hashes above it into
-     * orphaned_blocks, delete every chain table above it, and add a reorgs row. Rows of
+     * orphaned_blocks, delete every chain table above it (the transactions too, and the transaction
+     * indexer's mark is lowered to the fork height when it is higher), and add a reorgs row. Rows of
      * supply_snapshots stay (see Schema).
      *
      * @return int the number of blocks removed
@@ -116,7 +117,13 @@ final class ChainStore
                  SELECT hash, height, ? FROM blocks WHERE height > ?',
                 [$detectedAt, $forkHeight],
             );
-            // The child first: the foreign key points from pricing_records to blocks.
+            // The children first: the foreign keys point from pricing_records and transactions
+            // to blocks. The mark of the transaction indexer never stays above the fork.
+            $this->db->exec('DELETE FROM transactions WHERE height > ?', [$forkHeight]);
+            $this->db->exec(
+                'UPDATE meta SET value = ? WHERE key = ? AND CAST(value AS INTEGER) > ?',
+                [(string) $forkHeight, TransactionStore::MARK_KEY, $forkHeight],
+            );
             $this->db->exec('DELETE FROM pricing_records WHERE height > ?', [$forkHeight]);
             $removed = $this->db->exec('DELETE FROM blocks WHERE height > ?', [$forkHeight]);
             $this->db->exec(

@@ -7,6 +7,10 @@ namespace Lateo\Explorer\Tests;
 use Lateo\Explorer\Indexer\IndexerApplication;
 use Lateo\Explorer\Tests\Support\FakeChain;
 use Lateo\Explorer\Tests\Support\IndexerTestBase;
+use Lateo\Explorer\Tests\Support\RecordedCall;
+use Lateo\Explorer\Tests\Support\TxServer;
+use Lateo\Explorer\Db\TransactionStore;
+use Lateo\Explorer\Rpc\TransportResponse;
 
 final class IndexerApplicationTest extends IndexerTestBase
 {
@@ -27,10 +31,13 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->cache = $dir . '/cache';
     }
 
+    /** @var array<string,mixed> */
+    private array $limits = [];
+
     private function app(int $start = 0, bool $snapshotFallback = false): IndexerApplication
     {
         return new IndexerApplication(
-            $this->config(),
+            $this->config($this->limits),
             $this->transport,
             $this->clock,
             fn () => $this->db,
@@ -57,7 +64,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->assertSame('', $this->read($this->err));
         $out = $this->read($this->out);
         $this->assertSame(1, preg_match(
-            '/\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ mode=tip from=0 to=30 headers=31 node=own-a outcome=complete reorgs=0 requests=3 snapshot=stored\n\z/',
+            '/\A\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ mode=tip from=0 to=30 headers=31 node=own-a outcome=complete reorgs=0 requests=3 snapshot=stored tx=off\n\z/',
             $out,
         ), 'log line: ' . $out);
         $this->assertSame(31, $this->count('blocks'));
@@ -70,7 +77,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->assertSame('own-a', $run['node']);
         $this->assertSame('complete', $run['outcome']);
         $this->assertSame('', $run['note']);
-        $this->assertSame(1, (int) $this->db->value('SELECT value FROM meta WHERE key = \'schema_version\''));
+        $this->assertSame(2, (int) $this->db->value('SELECT value FROM meta WHERE key = \'schema_version\''));
     }
 
     public function testTheLogLineAndErrorsNeverContainAnAddress(): void
@@ -177,6 +184,133 @@ final class IndexerApplicationTest extends IndexerTestBase
         $run = $this->db->one('SELECT * FROM runs ORDER BY id DESC LIMIT 1');
         $this->assertSame('waiting', $run['outcome']);
         $this->assertSame('node own-a: two blocks of equal work at height 20; waiting for the next block', $run['note']);
+    }
+
+    // --- the transaction indexer ---------------------------------------------------------------
+
+    /** Serve the chain, its transactions and the supply answers on the given hosts (default: both own nodes). */
+    private function serveTx(FakeChain $chain, ?array $hosts = null): TxServer
+    {
+        $server = new TxServer($chain);
+        foreach ($hosts ?? [self::A, self::B] as $host) {
+            $this->transport->serve($host, static function (RecordedCall $c) use ($server): TransportResponse {
+                if (in_array($c->method, ['get_reserve_info', 'get_circulating_supply', 'get_audited_supply'], true)) {
+                    return new TransportResponse(200, (string) file_get_contents(__DIR__ . '/fixtures/rpc/' . $c->method . '.json'));
+                }
+                return $server->respond($c);
+            });
+        }
+        return $server;
+    }
+
+    public function testTheTransactionIndexerIsOffByDefaultAndAsksNothing(): void
+    {
+        $server = $this->serveTx(FakeChain::synthetic(0, 30));
+        $this->assertSame(0, $this->app()->run(), $this->read($this->err));
+        $this->assertStringContains(' tx=off' . "\n", $this->read($this->out));
+        $this->assertSame([], $server->served, 'neither get_block nor /get_transactions was called');
+        $this->assertSame(0, $this->count('transactions'));
+        $this->assertSame(0, (int) $this->db->value("SELECT count(*) FROM meta WHERE key = 'tx_indexed_height'"));
+        $this->assertSame(31, $this->count('blocks'), 'the headers were indexed as before');
+        foreach ($this->transport->calls as $call) {
+            $this->assertFalse(in_array($call->method, ['get_block', '/get_transactions'], true));
+        }
+    }
+
+    public function testSwitchedOnTheRunStoresTheTransactionsAndLogsThem(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true];
+        $server = $this->serveTx(FakeChain::synthetic(0, 30));
+        $this->assertSame(0, $this->app()->run(), $this->read($this->err));
+        $out = $this->read($this->out);
+        $this->assertSame(1, preg_match(
+            '/\A\S+ mode=tip from=0 to=30 headers=31 node=own-a outcome=complete reorgs=0 requests=3 snapshot=stored tx=complete txfrom=0 txto=30 txblocks=20 txs=30 txcalls=21\n\z/',
+            $out,
+        ), 'log line: ' . $out);
+        $this->assertSame(30, $this->count('transactions'));
+        $this->assertSame('30', $this->db->value("SELECT value FROM meta WHERE key = 'tx_indexed_height'"));
+        $this->assertSame(20, $server->served['get_block']);
+        $this->assertSame('', $this->read($this->err));
+        $this->assertFalse(in_array(self::F, $this->transport->hosts(), true), 'the fallback was not asked');
+
+        // The next run has nothing to do and says so.
+        $this->app()->run();
+        $lines = explode("\n", trim($this->read($this->out)));
+        $this->assertStringContains(' tx=complete txfrom=- txto=- txblocks=0 txs=0 txcalls=0', $lines[1]);
+    }
+
+    public function testABackfillRunSkipsTheTransactionWork(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true, 'run_seconds' => 3600];
+        $server = $this->serveTx(FakeChain::synthetic(0, 300));
+        $this->assertSame(0, $this->app()->run(), $this->read($this->err));
+        $out = $this->read($this->out);
+        $this->assertStringContains('mode=backfill', $out);
+        $this->assertStringContains(' tx=skipped' . "\n", $out);
+        $this->assertSame([], $server->served, 'no get_block, no /get_transactions');
+        $this->assertSame(0, $this->count('transactions'));
+        $this->assertNull((new TransactionStore($this->db))->indexedHeight());
+
+        // The same database, now close to the tip: the transaction work starts.
+        $this->limits = ['tx_backfill_enabled' => true];
+        $server = $this->serveTx(FakeChain::synthetic(0, 305));
+        $this->assertSame(0, $this->app()->run(), $this->read($this->err));
+        $lines = explode("\n", trim($this->read($this->out)));
+        $this->assertStringContains('mode=tip', $lines[1]);
+        $this->assertStringContains(' tx=time txfrom=0 ', $lines[1], 'about 200 blocks with transactions, two seconds each: the 45 seconds of the run are over first');
+        $this->assertTrue(($server->served['get_block'] ?? 0) > 0);
+    }
+
+    public function testAHeaderRunThatEndsInAnErrorSkipsTheTransactionWork(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true];
+        $chain = FakeChain::synthetic(0, 30);
+        $chain->mutateBody(static fn (string $body): string => str_replace('"height":5,', '"height":6,', $body));
+        $server = $this->serveTx($chain);
+        $this->assertSame(1, $this->app()->run());
+        $this->assertStringContains(' tx=skipped' . "\n", $this->read($this->out));
+        $this->assertSame([], $server->served);
+        $this->assertSame(0, $this->count('transactions'));
+    }
+
+    public function testAnErrorOfTheTransactionIndexerIsReportedWithExitOneAndNoAddress(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true];
+        $chain = FakeChain::synthetic(0, 12);
+        $server = $this->serveTx($chain);
+        $server->mutateTransactions = static function (array $asked, array $body): array {
+            array_pop($body['txs']);
+            return $body;
+        };
+        // The fallback would answer everything correctly, if it were asked.
+        $good = new TxServer($chain);
+        $this->transport->serve(self::F, static fn (RecordedCall $c): TransportResponse => $good->respond($c));
+        $this->assertSame(1, $this->app()->run());
+        $this->assertStringContains(' tx=error ', $this->read($this->out));
+        $err = $this->read($this->err);
+        $this->assertStringContains('indexer: transactions: invalid-data: a node sent', $err);
+        foreach (['example.invalid', 'lateo.dev', 'http', ':17767'] as $forbidden) {
+            $this->assertStringNotContains($forbidden, $err);
+            $this->assertStringNotContains($forbidden, $this->read($this->out));
+        }
+        $this->assertSame(0, $this->count('transactions'));
+        $this->assertSame([], $good->served, 'the fallback was never asked for a block or a transaction');
+    }
+
+    public function testTheFallbackAnswersHeadersOnlyAndIsNeverAskedForTransactions(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true];
+        $chain = FakeChain::synthetic(0, 12);
+        $this->down(self::A);
+        $this->down(self::B);
+        $fallback = new TxServer($chain);
+        $this->transport->serve(self::F, static fn (RecordedCall $c): TransportResponse => $fallback->respond($c));
+        $code = $this->app()->run();
+        $this->assertSame(1, $code, 'the headers came from the fallback, the transactions could not come from anywhere');
+        $this->assertSame(13, $this->count('blocks'));
+        $this->assertSame([], $fallback->served);
+        $this->assertSame(0, $this->count('transactions'));
+        $this->assertStringContains(' tx=error ', $this->read($this->out));
     }
 
     /** @return list<list<array<string,mixed>>> */

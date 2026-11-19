@@ -24,6 +24,10 @@ final readonly class Limits
         public int $unsettledDepth = 10,
         /** Web calls to the own nodes per minute, over all processes and page requests. */
         public int $webOwnCallsPerMinute = 60,
+        /** Whether the indexer reads the transactions of the blocks (off until the operator decides). */
+        public bool $txBackfillEnabled = false,
+        /** Pause between two calls of the transaction indexer, in seconds. */
+        public float $txBackfillPauseSeconds = 2.0,
     ) {
     }
 }

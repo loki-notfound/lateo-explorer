@@ -318,6 +318,59 @@ final class PolicyTest extends WebTestBase
         $this->assertTrue(RpcMethod::tryFrom('get_block') !== null && RpcMethod::tryFrom('relay_tx') === null);
     }
 
+    public function testTheTransactionIndexerAsksOnlyOwnNodesAndOnlyReads(): void
+    {
+        $code = $this->read(self::root() . '/src/Indexer/TransactionIndexer.php');
+        // Every call names its method, passes allowFallback = false and one node label.
+        preg_match_all('/->call\((.*?)\);/s', $code, $m);
+        $this->assertCount(2, $m[1], 'two calls: get_block and /get_transactions');
+        $methods = [];
+        foreach ($m[1] as $call) {
+            $this->assertSame(1, preg_match('/RpcMethod::([A-Za-z]+),/', $call, $name), $call);
+            $methods[] = $name[1];
+            $this->assertSame(1, preg_match('/,\s*false,\s*\$label\s*,?\s*\z/', $call), 'no fallback, one chosen node: ' . $call);
+        }
+        sort($methods);
+        $this->assertSame(['GetBlock', 'GetTransactions'], $methods);
+        $this->assertStringNotContains('fallbackLabel', $code);
+        $this->assertStringNotContains('orderedNodes', $code);
+        $this->assertStringNotContains('Profile::Web', $code);
+        $this->assertStringNotContains('http', $code);
+        // Only the indexer profile is used by the code that runs it.
+        $app = $this->read(self::root() . '/src/Indexer/IndexerApplication.php');
+        $this->assertSame(1, substr_count($app, 'new TransactionIndexer('));
+        $this->assertSame(1, preg_match('/if \(!\$this->config->limits->txBackfillEnabled\) \{\s*return TxSummary::off\(\);\s*\}\s*if \(\$summary->outcome === RunSummary::ERROR \|\| \$summary->mode !== RunMode::Tip\) \{\s*return TxSummary::skipped\(\);\s*\}/', $app), 'off, and skipped after an error or in backfill mode, before the indexer is made');
+        // Nothing of a transaction that is private to its owner is read or stored.
+        $parser = $this->read(self::root() . '/src/Indexer/TransactionParser.php');
+        $store = $this->read(self::root() . '/src/Db/TransactionStore.php');
+        foreach (['k_image', 'key_offsets', 'view_tag', 'extra', 'unlock_time', 'ecdhInfo', 'outPk'] as $field) {
+            $this->assertStringNotContains("'" . $field . "'", $parser, $field . ' is not read');
+            $this->assertStringNotContains($field, $store, $field . ' is not stored');
+        }
+        // The page code never uses the transaction calls.
+        foreach ($this->ownCode() as $file => $source) {
+            if (str_contains($file, '/Web/')) {
+                $this->assertStringNotContains('GetTransactions', $source, basename($file));
+                $this->assertStringNotContains('TransactionIndexer', $source, basename($file));
+            }
+        }
+    }
+
+    public function testTheRpcAllowListHoldsOnlyReads(): void
+    {
+        $names = array_map(static fn (RpcMethod $m): string => $m->value, RpcMethod::cases());
+        sort($names);
+        $this->assertSame([
+            '/get_transaction_pool_hashes', '/get_transaction_pool_stats', '/get_transactions', 'get_audited_supply',
+            'get_block', 'get_block_header_by_hash', 'get_block_header_by_height', 'get_block_headers_range',
+            'get_circulating_supply', 'get_fee_estimate', 'get_info', 'get_last_block_header', 'get_reserve_info',
+            'get_version', 'hard_fork_info',
+        ], $names);
+        foreach ($names as $name) {
+            $this->assertSame(0, preg_match('/send|relay|submit|stop|start|set_|save|flush|pop|mining|ban|out_peers|in_peers|limit/', $name), $name);
+        }
+    }
+
     public function testTheSkipMarkerBelongsToThePagesOnly(): void
     {
         foreach ($this->ownCode() as $file => $code) {

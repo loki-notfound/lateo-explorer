@@ -1,0 +1,51 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "blob": "0303d29bd5aa06d5e48fb4f7022fba80abb6d10d6832149d013da7fbc11cb50734a7b8d22ed73dc142260020529c15870e0000600a1cbdce0b0000d0a781930e000000e04821ef11000000b0ebc5eada000000f093af3ed8000000d34d556500000000cd79a4b45ef87b64049ca591e54bffb251d2e292e9abe85f87b3ff57d3ad8cb84a01e113b59c6f0414769ce8ec0aeae3b8b9f908b00c0434493b1d19928a9bdb03cab10701ff8eb10703e9fca88fb8d10202c9529cbf16fb4538108aa03fef178f1a20018a03d7b227aad897f1e4568c2528045a4550486afbc185b6981602f340c253eec79f57b4a29446ec026eda0b160ed14e5048b0ef4d0214b04eb182045a455048e5f4c49aa506020f146a8cfadd4c9ab68130b4f4c1f7d671a2f242cd32390939d8cab3fca41c5d075a455048525356295501740a08c5e721ab82d7f3036a687307ecae0c9ba93b899990446c838d8c25ddb202110000049e1568447d00000000000000000001b8adc072354cef7bec1d64271caf10b8a62bb2dfdac1b025f2087e9ef5e4bd1000000000134316af61eff983212b66cd50c7fee6102f02834c156e9dbd4587e47df5b297b24452814b97df58f31e64900582b2824ac0614663fa14202251b5e1de6f06ad77d2bf428fd2cb3af133c429a979af1155eff99ae28cd26870f28556b4be0afda2002d6945b844731ceec3ea6775d0beeaccd1d5beb4f0a792bf67741f47cc1c21c8d8bdacc64b75eb3fbd7bb0a935cd5d9a1b460e06ec9f917fd76f198eaa05ecf64049c45f86e0be04575999e50e48610bcbf1ba4279d6b5f4afea1ecb99d7eeb35f835b738c4033ffb0e3f8a1d76ff1c482badfcc480612f26e86f8ea849fbd06ea2731361644425c0ca11b67a9e771e5178f4adc162a8b4c6e79eb4874958b7df5550bdccdda83726d00a9557b4c2f01c3f44f695e828f67666d1a6cfd3871f79b0b427fef170afb80b51f3722d570f419858fcb9539bd1616764bfddfdc3398aa5795406a483115c4d53c5a3f8fc8881027197a2b2cc2c3a455233afd1e3e35dceab14b527d2474b796c4d69c797c01c4541ff8010da5fae9b2896c3f403f5030e6cddaa14d4a506d01187b3031fc4928efee29dafaec06fa4027a385b0e3a47d52c399233081c263a024d4d83a509b2c4f0e7c793e66e74b829961c0d5affcdbba80ed1d416306dbdeeb7d1d6f406dcafa1f9697e17fc8086d35dcd0020de073a6e7eaf4c0f305156283b20c1e4d21395807adbe59436c963c3cf8c695f12f9ad24eff35b38b7d6f2c20976f88743011e6b51d6c6fde1c70722f774583c50f8abde58cbdfdf26701bb8f671b14b5d07ec4e3ce14df36a38dda0136ea1328f7a8fe54e8c752a9102686b06ddd1e8acf29011fa835a8f87bfff4ec61153ee4",
+    "block_header": {
+      "block_size": 302448,
+      "block_weight": 302448,
+      "cumulative_difficulty": 8492276988989269,
+      "cumulative_difficulty_top64": 0,
+      "depth": 790011,
+      "difficulty": 91927289793,
+      "difficulty_top64": 0,
+      "hash": "e869b875d102e6fca99498abc8ef163d0de4461bc8c0a51c8f8aff1fc1a82d71",
+      "height": 120974,
+      "long_term_weight": 302448,
+      "major_version": 3,
+      "miner_tx_hash": "f76a73734212ecd2b962e7c0b8d6ba816cf6c174dd979129b12ddc92e06b7b73",
+      "minor_version": 3,
+      "nonce": 2507457,
+      "num_txes": 19,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "d5e48fb4f7022fba80abb6d10d6832149d013da7fbc11cb50734a7b8d22ed73d",
+      "pricing_record": {
+        "moving_average": 12982563900000,
+        "reserve": 940241710000,
+        "reserve_ma": 928764630000,
+        "reserve_ratio": 0,
+        "reserve_ratio_ma": 0,
+        "signature": "cd79a4b45ef87b64049ca591e54bffb251d2e292e9abe85f87b3ff57d3ad8cb84a01e113b59c6f0414769ce8ec0aeae3b8b9f908b00c0434493b1d19928a9bdb",
+        "spot": 15973345940000,
+        "stable": 62604290000,
+        "stable_ma": 77026380000,
+        "timestamp": 1700089299,
+        "yield_price": 0
+      },
+      "reward": 12358455017944,
+      "timestamp": 1700089298,
+      "wide_cumulative_difficulty": "0x1e2bae51434f55",
+      "wide_difficulty": "0x15674b1fc1"
+    },
+    "credits": 0,
+    "json": "{\n  \"major_version\": 3, \n  \"minor_version\": 3, \n  \"timestamp\": 1700089298, \n  \"prev_id\": \"d5e48fb4f7022fba80abb6d10d6832149d013da7fbc11cb50734a7b8d22ed73d\", \n  \"nonce\": 2507457, \n  \"pr_v2\": \"20529c15870e0000600a1cbdce0b0000d0a781930e000000e04821ef11000000b0ebc5eada000000f093af3ed8000000d34d556500000000cd79a4b45ef87b64049ca591e54bffb251d2e292e9abe85f87b3ff57d3ad8cb84a01e113b59c6f0414769ce8ec0aeae3b8b9f908b00c0434493b1d19928a9bdb\", \n  \"miner_tx\": {\n    \"version\": 3, \n    \"unlock_time\": 121034, \n    \"vin\": [ {\n        \"gen\": {\n          \"height\": 120974\n        }\n      }\n    ], \n    \"vout\": [ {\n        \"amount\": 11594296344169, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"c9529cbf16fb4538108aa03fef178f1a20018a03d7b227aad897f1e4568c2528\", \n            \"asset_type\": \"ZEPH\", \n            \"view_tag\": \"6a\"\n          }\n        }\n      }, {\n        \"amount\": 762470031611, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"f340c253eec79f57b4a29446ec026eda0b160ed14e5048b0ef4d0214b04eb182\", \n            \"asset_type\": \"ZEPH\", \n            \"view_tag\": \"e5\"\n          }\n        }\n      }, {\n        \"amount\": 1688642164, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"0f146a8cfadd4c9ab68130b4f4c1f7d671a2f242cd32390939d8cab3fca41c5d\", \n            \"asset_type\": \"ZEPHRSV\", \n            \"view_tag\": \"29\"\n          }\n        }\n      }\n    ], \n    \"extra\": [ 1, 116, 10, 8, 197, 231, 33, 171, 130, 215, 243, 3, 106, 104, 115, 7, 236, 174, 12, 155, 169, 59, 137, 153, 144, 68, 108, 131, 141, 140, 37, 221, 178, 2, 17, 0, 0, 4, 158, 21, 104, 68, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 184, 173, 192, 114, 53, 76, 239, 123, 236, 29, 100, 39, 28, 175, 16, 184, 166, 43, 178, 223, 218, 193, 176, 37, 242, 8, 126, 158, 245, 228, 189, 16\n    ], \n    \"pricing_record_height\": 0, \n    \"amount_burnt\": 0, \n    \"amount_minted\": 0, \n    \"rct_signatures\": {\n      \"type\": 0\n    }\n  }, \n  \"tx_hashes\": [ \"4316af61eff983212b66cd50c7fee6102f02834c156e9dbd4587e47df5b297b2\", \"4452814b97df58f31e64900582b2824ac0614663fa14202251b5e1de6f06ad77\", \"d2bf428fd2cb3af133c429a979af1155eff99ae28cd26870f28556b4be0afda2\", \"002d6945b844731ceec3ea6775d0beeaccd1d5beb4f0a792bf67741f47cc1c21\", \"c8d8bdacc64b75eb3fbd7bb0a935cd5d9a1b460e06ec9f917fd76f198eaa05ec\", \"f64049c45f86e0be04575999e50e48610bcbf1ba4279d6b5f4afea1ecb99d7ee\", \"b35f835b738c4033ffb0e3f8a1d76ff1c482badfcc480612f26e86f8ea849fbd\", \"06ea2731361644425c0ca11b67a9e771e5178f4adc162a8b4c6e79eb4874958b\", \"7df5550bdccdda83726d00a9557b4c2f01c3f44f695e828f67666d1a6cfd3871\", \"f79b0b427fef170afb80b51f3722d570f419858fcb9539bd1616764bfddfdc33\", \"98aa5795406a483115c4d53c5a3f8fc8881027197a2b2cc2c3a455233afd1e3e\", \"35dceab14b527d2474b796c4d69c797c01c4541ff8010da5fae9b2896c3f403f\", \"5030e6cddaa14d4a506d01187b3031fc4928efee29dafaec06fa4027a385b0e3\", \"a47d52c399233081c263a024d4d83a509b2c4f0e7c793e66e74b829961c0d5af\", \"fcdbba80ed1d416306dbdeeb7d1d6f406dcafa1f9697e17fc8086d35dcd0020d\", \"e073a6e7eaf4c0f305156283b20c1e4d21395807adbe59436c963c3cf8c695f1\", \"2f9ad24eff35b38b7d6f2c20976f88743011e6b51d6c6fde1c70722f774583c5\", \"0f8abde58cbdfdf26701bb8f671b14b5d07ec4e3ce14df36a38dda0136ea1328\", \"f7a8fe54e8c752a9102686b06ddd1e8acf29011fa835a8f87bfff4ec61153ee4\"\n  ]\n}",
+    "miner_tx_hash": "f76a73734212ecd2b962e7c0b8d6ba816cf6c174dd979129b12ddc92e06b7b73",
+    "status": "OK",
+    "top_hash": "",
+    "tx_hashes": ["4316af61eff983212b66cd50c7fee6102f02834c156e9dbd4587e47df5b297b2","4452814b97df58f31e64900582b2824ac0614663fa14202251b5e1de6f06ad77","d2bf428fd2cb3af133c429a979af1155eff99ae28cd26870f28556b4be0afda2","002d6945b844731ceec3ea6775d0beeaccd1d5beb4f0a792bf67741f47cc1c21","c8d8bdacc64b75eb3fbd7bb0a935cd5d9a1b460e06ec9f917fd76f198eaa05ec","f64049c45f86e0be04575999e50e48610bcbf1ba4279d6b5f4afea1ecb99d7ee","b35f835b738c4033ffb0e3f8a1d76ff1c482badfcc480612f26e86f8ea849fbd","06ea2731361644425c0ca11b67a9e771e5178f4adc162a8b4c6e79eb4874958b","7df5550bdccdda83726d00a9557b4c2f01c3f44f695e828f67666d1a6cfd3871","f79b0b427fef170afb80b51f3722d570f419858fcb9539bd1616764bfddfdc33","98aa5795406a483115c4d53c5a3f8fc8881027197a2b2cc2c3a455233afd1e3e","35dceab14b527d2474b796c4d69c797c01c4541ff8010da5fae9b2896c3f403f","5030e6cddaa14d4a506d01187b3031fc4928efee29dafaec06fa4027a385b0e3","a47d52c399233081c263a024d4d83a509b2c4f0e7c793e66e74b829961c0d5af","fcdbba80ed1d416306dbdeeb7d1d6f406dcafa1f9697e17fc8086d35dcd0020d","e073a6e7eaf4c0f305156283b20c1e4d21395807adbe59436c963c3cf8c695f1","2f9ad24eff35b38b7d6f2c20976f88743011e6b51d6c6fde1c70722f774583c5","0f8abde58cbdfdf26701bb8f671b14b5d07ec4e3ce14df36a38dda0136ea1328","f7a8fe54e8c752a9102686b06ddd1e8acf29011fa835a8f87bfff4ec61153ee4"],
+    "untrusted": false
+  }
+}

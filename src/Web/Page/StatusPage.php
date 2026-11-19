@@ -53,6 +53,8 @@ final class StatusPage
             'outcomeWords' => $run === null ? '' : self::outcomeWords((string) $run['outcome']),
             'reorg' => $index->lastReorg(),
             'snapshot' => $index->lastSnapshotTime(),
+            'txIndexed' => $index->txIndexedHeight(),
+            'txEnabled' => $s->config->limits->txBackfillEnabled,
         ]);
         return $s->layout->page(
             200,

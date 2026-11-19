@@ -105,7 +105,8 @@ while (!file_exists(' . var_export($release, true) . ') && microtime(true) < $de
         $db = Database::openWritable($file);
         $this->assertSame('wal', strtolower((string) $db->value('PRAGMA journal_mode')));
         Schema::migrate($db);
-        $this->assertSame('1', (string) $db->value("SELECT value FROM meta WHERE key = 'schema_version'"));
+        $this->assertSame((string) Schema::VERSION, (string) $db->value("SELECT value FROM meta WHERE key = 'schema_version'"));
+        $this->assertSame('2', (string) Schema::VERSION);
         $this->assertTrue(file_exists($file));
         Schema::migrate($db); // a second migration finds nothing to do
         $this->assertSame(1, (int) $db->value("SELECT count(*) FROM meta WHERE key = 'schema_version'"));

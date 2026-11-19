@@ -85,6 +85,13 @@ final class Index
         return $this->db->one('SELECT detected_at, fork_height, old_tip_height, depth FROM reorgs ORDER BY id DESC LIMIT 1');
     }
 
+    /** The height up to which every block has its transactions stored, or null when none has yet. */
+    public function txIndexedHeight(): ?int
+    {
+        $v = $this->db->value('SELECT value FROM meta WHERE key = ?', ['tx_indexed_height']);
+        return $v === null ? null : (int) $v;
+    }
+
     /** Unix time of the newest supply snapshot, or null when there is none. */
     public function lastSnapshotTime(): ?int
     {

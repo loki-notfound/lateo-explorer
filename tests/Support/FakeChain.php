@@ -163,6 +163,11 @@ final class FakeChain
         return (string) $this->headers[$height]['hash'];
     }
 
+    public function has(int $height): bool
+    {
+        return isset($this->headers[$height]);
+    }
+
     public function topHeight(): int
     {
         return (int) array_key_last($this->headers);

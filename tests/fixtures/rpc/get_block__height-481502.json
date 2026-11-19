@@ -1,0 +1,51 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "blob": "0809c680abbf067e2d3c494e36f32ec3a13f1778612922c29d7d54fbdab335b5ebd45b8db35ed873de5c00b0155c2fb3000000c0ae7e0ca600000030c57e892e01000030c8636a47010000b0936d2f280100006097bf011e01000050f21a2223030000e0901dd7e7020000508f49624101000046c0ea6700000000491137a0c50d7cb95dada41d47fc56aefcb776acab443a6ccdcccdc6497b6040482016f2f1523efd3253960557683ecfd6a7ebec789e3fc62393c850a90df6c7039ab21d01ffdeb11d019efdfec8c7cd01025e85161da6c7558d202dcff14e2a973519119ddcf0e9d6df380c3de612f00325035a50482634013802d268dff6e45f47e4bcad5e84198dac1393aa6d114d134f32f0478119180b0211000000093ec8b700000000000000000000000000000266eb85906beff7e271c5ae9b9f8d52af47e95ac8f085bbad5406bfbd51ee403ae9e7ff7108dca44517fcf1010883f819591e14e03cde978bcb0129df6fabb6e7",
+    "block_header": {
+      "block_size": 92739,
+      "block_weight": 92739,
+      "cumulative_difficulty": 53697547860045858,
+      "cumulative_difficulty_top64": 0,
+      "depth": 429484,
+      "difficulty": 14593988136,
+      "difficulty_top64": 0,
+      "hash": "17115b1e7f2dec028a8335df7e8712dc1b4b2a0d84bfb73d1a9a8acab83c1f7d",
+      "height": 481502,
+      "long_term_weight": 176470,
+      "major_version": 8,
+      "miner_tx_hash": "bcf3eb6894cecd1e9e086c99b503d9d24493431365ddfe29ea6961fa05aa91a9",
+      "minor_version": 9,
+      "nonce": 6086259,
+      "num_txes": 2,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "7e2d3c494e36f32ec3a13f1778612922c29d7d54fbdab335b5ebd45b8db35ed8",
+      "pricing_record": {
+        "moving_average": 713174200000,
+        "reserve": 1272106030000,
+        "reserve_ma": 1228389980000,
+        "reserve_ratio": 3449430930000,
+        "reserve_ratio_ma": 3194769740000,
+        "signature": "491137a0c50d7cb95dada41d47fc56aefcb776acab443a6ccdcccdc6497b6040482016f2f1523efd3253960557683ecfd6a7ebec789e3fc62393c850a90df6c7",
+        "spot": 769593710000,
+        "stable": 1299386910000,
+        "stable_ma": 1406239230000,
+        "timestamp": 1743437894,
+        "yield_price": 1380333490000
+      },
+      "reward": 7062958358174,
+      "timestamp": 1743437894,
+      "wide_cumulative_difficulty": "0xbec5a2a181f022",
+      "wide_difficulty": "0x365de9628"
+    },
+    "credits": 0,
+    "json": "{\n  \"major_version\": 8, \n  \"minor_version\": 9, \n  \"timestamp\": 1743437894, \n  \"prev_id\": \"7e2d3c494e36f32ec3a13f1778612922c29d7d54fbdab335b5ebd45b8db35ed8\", \n  \"nonce\": 6086259, \n  \"pricing_record\": \"b0155c2fb3000000c0ae7e0ca600000030c57e892e01000030c8636a47010000b0936d2f280100006097bf011e01000050f21a2223030000e0901dd7e7020000508f49624101000046c0ea6700000000491137a0c50d7cb95dada41d47fc56aefcb776acab443a6ccdcccdc6497b6040482016f2f1523efd3253960557683ecfd6a7ebec789e3fc62393c850a90df6c7\", \n  \"miner_tx\": {\n    \"version\": 3, \n    \"unlock_time\": 481562, \n    \"vin\": [ {\n        \"gen\": {\n          \"height\": 481502\n        }\n      }\n    ], \n    \"vout\": [ {\n        \"amount\": 7062958358174, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"5e85161da6c7558d202dcff14e2a973519119ddcf0e9d6df380c3de612f00325\", \n            \"asset_type\": \"ZPH\", \n            \"view_tag\": \"26\"\n          }\n        }\n      }\n    ], \n    \"extra\": [ 1, 56, 2, 210, 104, 223, 246, 228, 95, 71, 228, 188, 173, 94, 132, 25, 141, 172, 19, 147, 170, 109, 17, 77, 19, 79, 50, 240, 71, 129, 25, 24, 11, 2, 17, 0, 0, 0, 9, 62, 200, 183, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n    ], \n    \"pricing_record_height\": 0, \n    \"amount_burnt\": 0, \n    \"amount_minted\": 0, \n    \"rct_signatures\": {\n      \"type\": 0\n    }\n  }, \n  \"tx_hashes\": [ \"66eb85906beff7e271c5ae9b9f8d52af47e95ac8f085bbad5406bfbd51ee403a\", \"e9e7ff7108dca44517fcf1010883f819591e14e03cde978bcb0129df6fabb6e7\"\n  ]\n}",
+    "miner_tx_hash": "bcf3eb6894cecd1e9e086c99b503d9d24493431365ddfe29ea6961fa05aa91a9",
+    "status": "OK",
+    "top_hash": "",
+    "tx_hashes": ["66eb85906beff7e271c5ae9b9f8d52af47e95ac8f085bbad5406bfbd51ee403a","e9e7ff7108dca44517fcf1010883f819591e14e03cde978bcb0129df6fabb6e7"],
+    "untrusted": false
+  }
+}

@@ -182,6 +182,7 @@ final readonly class Config
         $known = [
             'page_max_calls', 'fallback_calls_per_minute', 'header_batch', 'backfill_pause_seconds',
             'run_seconds', 'reorg_max_depth', 'unsettled_depth', 'web_own_calls_per_minute',
+            'tx_backfill_enabled', 'tx_backfill_pause_seconds',
         ];
         foreach (array_keys($raw) as $key) {
             if (!in_array($key, $known, true)) {
@@ -198,6 +199,8 @@ final readonly class Config
             self::intSetting($raw, 'reorg_max_depth', $d->reorgMaxDepth, 1, 10000),
             self::intSetting($raw, 'unsettled_depth', $d->unsettledDepth, 0, 10000),
             self::intSetting($raw, 'web_own_calls_per_minute', $d->webOwnCallsPerMinute, 1, 600),
+            self::boolSetting($raw, 'tx_backfill_enabled', $d->txBackfillEnabled),
+            self::floatSetting($raw, 'tx_backfill_pause_seconds', $d->txBackfillPauseSeconds, 0.1, 60.0),
         );
         if ($limits->unsettledDepth > $limits->reorgMaxDepth) {
             throw new ConfigException('limits.unsettled_depth must not exceed reorg_max_depth');
@@ -211,6 +214,16 @@ final readonly class Config
         $v = $raw[$key] ?? $default;
         if (!is_int($v) || $v < $min || $v > $max) {
             throw new ConfigException("limits.$key must be an integer from $min to $max");
+        }
+        return $v;
+    }
+
+    /** @param array<mixed> $raw */
+    private static function boolSetting(array $raw, string $key, bool $default): bool
+    {
+        $v = $raw[$key] ?? $default;
+        if (!is_bool($v)) {
+            throw new ConfigException("limits.$key must be true or false");
         }
         return $v;
     }

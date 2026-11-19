@@ -20,6 +20,9 @@ use Lateo\Explorer\Rpc\TransportResponse;
  */
 final class FixtureTransport implements Transport
 {
+    /** Longest list whose elements all appear in a fixture name. */
+    public const MAX_LISTED = 8;
+
     /** @var list<RecordedCall> */
     public array $calls = [];
     /** @var array<string,list<TransportFailure|TransportResponse|\Closure>> */
@@ -113,7 +116,10 @@ final class FixtureTransport implements Transport
     /**
      * The fixture name of a call: the method (without a leading slash), then key-value pairs
      * in key order, joined by "__". A list value is its elements joined by "+", each cut to 12
-     * characters; other values are cut to 40. Characters outside A-Z a-z 0-9 _ . + - become _.
+     * characters; a list of more than MAX_LISTED elements (a file name has a length limit) is
+     * its first element cut to 12 characters, "+", the number of the others, "more-" and the
+     * first 12 characters of the SHA-1 of all elements joined by ","; other values are cut to
+     * 40. Characters outside A-Z a-z 0-9 _ . + - become _.
      *
      * @param array<string,mixed> $params
      */
@@ -135,6 +141,10 @@ final class FixtureTransport implements Transport
         if (is_array($v)) {
             if (!array_is_list($v)) {
                 return 'obj';
+            }
+            if (count($v) > self::MAX_LISTED) {
+                $all = implode(',', array_map(static fn (mixed $x): string => self::valueText($x), $v));
+                return substr(self::valueText($v[0]), 0, 12) . '+' . (count($v) - 1) . 'more-' . substr(sha1($all), 0, 12);
             }
             return implode('+', array_map(static fn (mixed $x): string => substr(self::valueText($x), 0, 12), $v));
         }

@@ -1,0 +1,51 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "blob": "0202d087faa506059da60901cb13370d697055996d727e9df6c106b44f915ca42de195a17df55bcf9e27b50000000000000000000000000000000000000000000000000286b90201ffcab802028a909bd2f2c703025a0cdf939f01dc8cb6a38bb96bf6928c16053da76d8e6060f1df6c4684ab96aa045a455048ecb9b697d1fc1702b549f68225afd6b42f4f06395a22ce3d742f7a4f0af74bd260ad8fed04a76ea6045a455048af550179b0bcd9d09fc49f198fc1f0f05bac3b6e3cb2dcb4549970fb20e3ff20028745021100000459b69359000000000000000000000123362e7386fcc6845a853ce4cbaf81b8633e96613098f427985c5deee7de6387000000000102380419f0265982d716028db673698302b63d48187db77079defec4f240b961",
+    "block_header": {
+      "block_size": 24883,
+      "block_weight": 24883,
+      "cumulative_difficulty": 1479279620434474,
+      "cumulative_difficulty_top64": 0,
+      "depth": 870975,
+      "difficulty": 84309403337,
+      "difficulty_top64": 0,
+      "hash": "b7a5cd34a0d819ffe9451046c63c42f8477edeea3b87604367cb059816dedb08",
+      "height": 40010,
+      "long_term_weight": 24883,
+      "major_version": 2,
+      "miner_tx_hash": "9364f5a60e9a249491007ee352e29777bcb6523070bfae288005788faa9dccf1",
+      "minor_version": 2,
+      "nonce": 3039272655,
+      "num_txes": 1,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "059da60901cb13370d697055996d727e9df6c106b44f915ca42de195a17df55b",
+      "pricing_record": {
+        "moving_average": 0,
+        "reserve": 0,
+        "reserve_ma": 0,
+        "reserve_ratio": 0,
+        "reserve_ratio_ma": 0,
+        "signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "spot": 0,
+        "stable": 0,
+        "stable_ma": 0,
+        "timestamp": 0,
+        "yield_price": 0
+      },
+      "reward": 16488185242435,
+      "timestamp": 1690207184,
+      "wide_cumulative_difficulty": "0x54165a04caa2a",
+      "wide_difficulty": "0x13a13b66c9"
+    },
+    "credits": 0,
+    "json": "{\n  \"major_version\": 2, \n  \"minor_version\": 2, \n  \"timestamp\": 1690207184, \n  \"prev_id\": \"059da60901cb13370d697055996d727e9df6c106b44f915ca42de195a17df55b\", \n  \"nonce\": 3039272655, \n  \"pr_v1\": \"000000000000000000000000000000000000000000000000\", \n  \"miner_tx\": {\n    \"version\": 2, \n    \"unlock_time\": 40070, \n    \"vin\": [ {\n        \"gen\": {\n          \"height\": 40010\n        }\n      }\n    ], \n    \"vout\": [ {\n        \"amount\": 15664455010314, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"5a0cdf939f01dc8cb6a38bb96bf6928c16053da76d8e6060f1df6c4684ab96aa\", \n            \"asset_type\": \"ZEPH\", \n            \"view_tag\": \"ec\"\n          }\n        }\n      }, {\n        \"amount\": 823730232121, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"b549f68225afd6b42f4f06395a22ce3d742f7a4f0af74bd260ad8fed04a76ea6\", \n            \"asset_type\": \"ZEPH\", \n            \"view_tag\": \"af\"\n          }\n        }\n      }\n    ], \n    \"extra\": [ 1, 121, 176, 188, 217, 208, 159, 196, 159, 25, 143, 193, 240, 240, 91, 172, 59, 110, 60, 178, 220, 180, 84, 153, 112, 251, 32, 227, 255, 32, 2, 135, 69, 2, 17, 0, 0, 4, 89, 182, 147, 89, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 35, 54, 46, 115, 134, 252, 198, 132, 90, 133, 60, 228, 203, 175, 129, 184, 99, 62, 150, 97, 48, 152, 244, 39, 152, 92, 93, 238, 231, 222, 99, 135\n    ], \n    \"pricing_record_height\": 0, \n    \"amount_burnt\": 0, \n    \"amount_minted\": 0, \n    \"rct_signatures\": {\n      \"type\": 0\n    }\n  }, \n  \"tx_hashes\": [ \"02380419f0265982d716028db673698302b63d48187db77079defec4f240b961\"\n  ]\n}",
+    "miner_tx_hash": "9364f5a60e9a249491007ee352e29777bcb6523070bfae288005788faa9dccf1",
+    "status": "OK",
+    "top_hash": "",
+    "tx_hashes": ["02380419f0265982d716028db673698302b63d48187db77079defec4f240b961"],
+    "untrusted": false
+  }
+}

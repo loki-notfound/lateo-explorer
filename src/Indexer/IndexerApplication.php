@@ -12,6 +12,7 @@ use Lateo\Explorer\Db\Database;
 use Lateo\Explorer\Db\RunStore;
 use Lateo\Explorer\Db\Schema;
 use Lateo\Explorer\Db\SnapshotStore;
+use Lateo\Explorer\Db\TransactionStore;
 use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
@@ -24,9 +25,10 @@ use Lateo\Explorer\Support\Clock;
  *
  * It takes the lock file with flock (LOCK_EX | LOCK_NB); when another run holds it, it ends
  * with exit code 0 and no output. Then: open and migrate the database, run the header indexer
- * and record the run, take the supply snapshot, sweep the cache and prune old runs. One log
- * line per run goes to $out (time in UTC, mode, heights, headers, node label, outcome; never
- * an address), errors go to $err. The exit code is 0, or 1 after an error.
+ * and record the run, take the supply snapshot, run the transaction indexer when the settings
+ * switch it on, sweep the cache and prune old runs. One log line per run goes to $out (time in
+ * UTC, mode, heights, headers, node label, outcome, the transaction fields; never an address),
+ * errors go to $err. The exit code is 0, or 1 after an error.
  *
  * The streams, the database opener, the lock and cache paths and the start height can be set
  * from outside so that tests need no real files, nodes or time.
@@ -80,6 +82,7 @@ final class IndexerApplication
 
     private function locked(): int
     {
+        $startedAt = $this->clock->now();
         $db = ($this->openDatabase)();
         Schema::migrate($db);
 
@@ -117,11 +120,13 @@ final class IndexerApplication
             ))->run($summary->tipNode)->value;
         }
 
+        $tx = $this->transactions($client, $chain, $db, $summary, $startedAt);
+
         (new FileCache($cacheDir, $this->clock))->sweep(self::CACHE_MAX_FILES, self::CACHE_KEEP_STALE_SECONDS);
         $runs->prune((int) floor($this->clock->now()));
 
         fwrite($this->out, sprintf(
-            "%s mode=%s from=%s to=%s headers=%d node=%s outcome=%s reorgs=%d requests=%d snapshot=%s\n",
+            "%s mode=%s from=%s to=%s headers=%d node=%s outcome=%s reorgs=%d requests=%d snapshot=%s %s\n",
             gmdate('Y-m-d\TH:i:s\Z', $summary->finishedAt),
             $summary->mode->value,
             $summary->fromHeight ?? '-',
@@ -132,13 +137,43 @@ final class IndexerApplication
             $summary->reorgs,
             $summary->requests,
             $snapshot,
+            $tx->logFields(),
         ));
 
         if ($summary->outcome === RunSummary::ERROR) {
             $this->error($summary->note);
             return 1;
         }
+        if ($tx->outcome === TxSummary::ERROR) {
+            $this->error('transactions: ' . $tx->note);
+            return 1;
+        }
         return 0;
+    }
+
+    /**
+     * The transaction indexer: off unless the settings switch it on (then nothing at all is
+     * asked or changed), skipped after a header run that ended in an error or that was a
+     * backfill run (far behind the tip), otherwise run on the own nodes only.
+     */
+    private function transactions(RpcClient $client, ChainStore $chain, Database $db, RunSummary $summary, float $startedAt): TxSummary
+    {
+        if (!$this->config->limits->txBackfillEnabled) {
+            return TxSummary::off();
+        }
+        if ($summary->outcome === RunSummary::ERROR || $summary->mode !== RunMode::Tip) {
+            return TxSummary::skipped();
+        }
+        $preferred = $summary->tipNode !== null && $summary->tipNode !== $client->fallbackLabel() ? $summary->tipNode : null;
+        return (new TransactionIndexer(
+            $client,
+            $chain,
+            new TransactionStore($db),
+            $this->config->limits,
+            $this->clock,
+            $startedAt,
+            $preferred,
+        ))->run();
     }
 
     private function error(string $message): void

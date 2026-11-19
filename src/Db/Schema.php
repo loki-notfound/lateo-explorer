@@ -13,11 +13,15 @@ namespace Lateo\Explorer\Db;
  * Integers: a uint64 from a node is stored as INTEGER. A value above the signed 64-bit range
  * is never stored (the indexer stops with an error instead). Difficulties are 128 bit and are
  * stored as decimal TEXT. Times are Unix seconds (UTC).
+ *
+ * Version 2 adds the transactions table and, in meta, the key tx_indexed_height (written by
+ * the transaction indexer, lowered by a rollback). Rolling the code back to version 1 is not
+ * supported: a database of version 2 is refused by version 1 code ("newer than this code").
  */
 final class Schema
 {
     /** The version this code writes. */
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     /**
      * Migrations by version: the statements that bring a database from version N-1 to N.
@@ -122,6 +126,41 @@ final class Schema
                     note TEXT NOT NULL
                 )',
                 'CREATE INDEX runs_started_at ON runs (started_at)',
+            ],
+            2 => [
+                // One row per non-miner transaction of a stored block, from /get_transactions
+                // with prune. The hash is lower-case hex (as everywhere in this database). The
+                // assets are stored as the canonical ticker (ZPH, ZSD, ZRS, ZYS or 'unknown',
+                // never a string of the chain) and the generation of the string the chain used
+                // (old: ZEPH, ZEPHUSD, ZEPHRSV, ZYIELD; new: ZPH, ZSD, ZRS, ZYS; unknown).
+                // tx_type is derived as the daemon derives it (cryptonote_tx_utils.cpp
+                // get_tx_asset_types and get_tx_type); every audit pair is 'audit'; a shape
+                // the daemon would not derive a type for is 'unknown'. fee is txnFee in atomic
+                // units of the source asset. unlock_time is not stored (an author chooses it
+                // freely). Inputs, outputs and signatures are not stored.
+                'CREATE TABLE transactions (
+                    hash TEXT PRIMARY KEY CHECK (length(hash) = 64 AND hash NOT GLOB \'*[^0-9a-f]*\'),
+                    height INTEGER NOT NULL REFERENCES blocks (height),
+                    idx INTEGER NOT NULL CHECK (idx >= 0),
+                    version INTEGER NOT NULL CHECK (version >= 0),
+                    rct_type INTEGER NOT NULL CHECK (rct_type >= 0),
+                    source_asset TEXT NOT NULL CHECK (source_asset IN (\'ZPH\', \'ZSD\', \'ZRS\', \'ZYS\', \'unknown\')),
+                    source_gen TEXT NOT NULL CHECK (source_gen IN (\'old\', \'new\', \'unknown\')),
+                    dest_asset TEXT NOT NULL CHECK (dest_asset IN (\'ZPH\', \'ZSD\', \'ZRS\', \'ZYS\', \'unknown\')),
+                    dest_gen TEXT NOT NULL CHECK (dest_gen IN (\'old\', \'new\', \'unknown\')),
+                    tx_type TEXT NOT NULL CHECK (tx_type IN (\'transfer\', \'mint_stable\', \'redeem_stable\',
+                        \'mint_reserve\', \'redeem_reserve\', \'mint_yield\', \'redeem_yield\', \'audit\', \'unknown\')),
+                    n_inputs INTEGER NOT NULL CHECK (n_inputs >= 0),
+                    n_outputs INTEGER NOT NULL CHECK (n_outputs >= 0),
+                    fee INTEGER NOT NULL CHECK (fee >= 0),
+                    pricing_record_height INTEGER NOT NULL CHECK (pricing_record_height >= 0),
+                    amount_burnt INTEGER NOT NULL CHECK (amount_burnt >= 0),
+                    amount_minted INTEGER NOT NULL CHECK (amount_minted >= 0),
+                    CHECK ((source_asset = \'unknown\') = (source_gen = \'unknown\')),
+                    CHECK ((dest_asset = \'unknown\') = (dest_gen = \'unknown\')),
+                    UNIQUE (height, idx)
+                ) WITHOUT ROWID',
+                'CREATE INDEX transactions_height ON transactions (height)',
             ],
         ];
     }

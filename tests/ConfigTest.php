@@ -55,6 +55,8 @@ final class ConfigTest extends TestCase
         $this->assertSame(100, $config->limits->reorgMaxDepth);
         $this->assertSame(10, $config->limits->unsettledDepth);
         $this->assertSame(60, $config->limits->webOwnCallsPerMinute);
+        $this->assertSame(false, $config->limits->txBackfillEnabled, 'the example switches the transaction indexer off');
+        $this->assertSame(2.0, $config->limits->txBackfillPauseSeconds);
     }
 
     public function testMissingSettingsFile(): void
@@ -208,6 +210,33 @@ final class ConfigTest extends TestCase
         $this->assertSame(0.0, $limits->backfillPauseSeconds);
         $this->assertSame(10000, $limits->reorgMaxDepth);
         $this->assertSame(600, $limits->webOwnCallsPerMinute);
+    }
+
+    public function testTheTransactionIndexerIsOffByDefaultAndTheSwitchMustBeABoolean(): void
+    {
+        $limits = Config::fromArray($this->valid())->limits;
+        $this->assertSame(false, $limits->txBackfillEnabled);
+        $this->assertSame(2.0, $limits->txBackfillPauseSeconds);
+        $s = $this->valid();
+        $s['limits'] = ['tx_backfill_enabled' => true, 'tx_backfill_pause_seconds' => 0.1];
+        $limits = Config::fromArray($s)->limits;
+        $this->assertSame(true, $limits->txBackfillEnabled);
+        $this->assertSame(0.1, $limits->txBackfillPauseSeconds);
+        $s['limits'] = ['tx_backfill_enabled' => false, 'tx_backfill_pause_seconds' => 60];
+        $this->assertSame(60.0, Config::fromArray($s)->limits->txBackfillPauseSeconds);
+        foreach ([1, 0, 'true', 'yes', 'false', []] as $bad) {
+            $s['limits'] = ['tx_backfill_enabled' => $bad];
+            $this->refused($s, 'limits.tx_backfill_enabled');
+        }
+    }
+
+    public function testThePauseOfTheTransactionIndexerIsBoundedFrom01To60(): void
+    {
+        foreach ([0, 0.0, 0.09, -1, 60.5, 61, '2.0', NAN, true] as $bad) {
+            $s = $this->valid();
+            $s['limits'] = ['tx_backfill_pause_seconds' => $bad];
+            $this->refused($s, 'limits.tx_backfill_pause_seconds');
+        }
     }
 
     public function testUnsettledDepthMustNotExceedReorgDepth(): void

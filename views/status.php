@@ -66,6 +66,13 @@ $now = $v['now'];
     <div><dt>Indexed height</dt><dd><?= Html::blockLink($v['top']['height']) ?></dd></div>
     <div><dt>Time of that block</dt><dd><?= Html::time($v['top']['timestamp'], $now) ?></dd></div>
 <?php endif; ?>
+<?php if ($v['txIndexed'] !== null): ?>
+    <div><dt>Transactions</dt><dd>Indexed up to block <?= Html::blockLink($v['txIndexed']) ?></dd></div>
+<?php elseif ($v['txEnabled']): ?>
+    <div><dt>Transactions</dt><dd>None stored yet</dd></div>
+<?php else: ?>
+    <div><dt>Transactions</dt><dd>Indexing is switched off</dd></div>
+<?php endif; ?>
 <?php if ($v['run'] === null): ?>
     <div><dt>Last indexer run</dt><dd>No run is recorded yet</dd></div>
 <?php else: ?>

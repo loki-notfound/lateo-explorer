@@ -34,5 +34,11 @@ return [
         'run_seconds' => 45,                // working time of one indexer run
         'reorg_max_depth' => 100,           // deepest reorganisation that is undone
         'unsettled_depth' => 10,            // tip blocks shown as not yet settled
+        // The transaction indexer reads every block's transactions from the own nodes, after
+        // the headers. It is off here; switching it on is the operator's decision, because it
+        // adds calls to the nodes (one get_block per block with transactions, and one
+        // /get_transactions call per up to 100 transactions, paused as below).
+        'tx_backfill_enabled' => false,
+        'tx_backfill_pause_seconds' => 2.0, // pause between two calls of the transaction indexer
     ],
 ];
