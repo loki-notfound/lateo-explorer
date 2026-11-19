@@ -24,6 +24,8 @@ final class FixtureTransport implements Transport
     public array $calls = [];
     /** @var array<string,list<TransportFailure|TransportResponse|\Closure>> */
     private array $scripts = [];
+    /** @var array<string,\Closure> */
+    private array $handlers = [];
 
     public function __construct(private readonly string $dir = __DIR__ . '/../fixtures/rpc')
     {
@@ -33,6 +35,17 @@ final class FixtureTransport implements Transport
     public function script(string $host, array $queue): void
     {
         $this->scripts[$host] = $queue;
+    }
+
+    /**
+     * Answer every call to $host (after its script queue is used up) with $handler, which gets
+     * the RecordedCall and returns a TransportResponse or throws a TransportFailure.
+     *
+     * @param \Closure(RecordedCall): TransportResponse $handler
+     */
+    public function serve(string $host, \Closure $handler): void
+    {
+        $this->handlers[$host] = $handler;
     }
 
     /** A JSON-RPC response with status OK; $members is raw JSON for more members of the result. */
@@ -72,6 +85,9 @@ final class FixtureTransport implements Transport
                 return $next($call);
             }
             return $next;
+        }
+        if (isset($this->handlers[$host])) {
+            return ($this->handlers[$host])($call);
         }
         return $this->fromFixture($call);
     }

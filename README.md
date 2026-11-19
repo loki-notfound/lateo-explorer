@@ -28,9 +28,9 @@ mapping of asset names, and their tests. There are no pages and no indexer yet.
 
 ## Requirements
 
-PHP 8.4 with the `curl` and `json` extensions. No Composer and no other
-packages: `src/autoload.php` is a small autoloader for the namespace
-`Lateo\Explorer`.
+PHP 8.4 with the `curl`, `gmp`, `json` and `pdo_sqlite` extensions (`gmp` compares
+cumulative difficulties). No Composer and no other packages: `src/autoload.php` is
+a small autoloader for the namespace `Lateo\Explorer`.
 
 ## Settings
 
@@ -53,8 +53,12 @@ The layout:
   responses.
 - `src/Cache/`: the file cache with per-key locks.
 - `src/Chain/`: the asset names of the chain.
+- `src/Db/`: the SQLite schema with its migrations, and the stores for the chain
+  tables, supply snapshots and runs.
+- `src/Indexer/`: the header indexer, the supply snapshot and the cron entry
+  point's application class.
 - `src/Support/`: the clock.
-- `bin/`: command-line programs (none yet).
+- `bin/indexer.php`: the indexer, run by cron with `--settings=<path>`.
 - `tests/`: the tests and the recorded fixtures.
 
 ## Security

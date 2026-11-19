@@ -94,6 +94,19 @@ final class RpcClient
         throw $last ?? new RpcException(ErrorCategory::Missing, null, 'no node to ask');
     }
 
+    /** @return list<string> the labels of the own nodes, in settings order */
+    public function ownLabels(): array
+    {
+        return array_map(static fn (NodeSpec $n): string => $n->label, $this->config->ownNodes());
+    }
+
+    /** The label of the fallback node, or null when none is configured. */
+    public function fallbackLabel(): ?string
+    {
+        $nodes = $this->config->fallbackNodes();
+        return $nodes === [] ? null : $nodes[0]->label;
+    }
+
     /** Number of attempts that went to a transport so far (all nodes). */
     public function attempts(): int
     {
