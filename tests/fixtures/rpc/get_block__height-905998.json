@@ -1,0 +1,51 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "blob": "0b0b92e3d6d706a64cb251dfdb750327f381f3d5669b769411bad27865663db7e5b46a01f016bf1f150900700b72f21a000000f09a1f9119000000a0de10badb07000080777cc757080000609080d8830000009014f0387d000000c0ef18567b01000060a8c98862010000c076328dd001000092b1f56a00000000d5c20491451a5a3f070e85326de51a7cc2234f9b96c2fadae5c267576bba87c32b11d341f43559fba65957240e97e53ac124583daec8c024a3a89d8f2be7438c03caa63701ff8ea6370287e3b1e98c700274325178e2785d87eb1745d75445d462468dcfc44ddf5c66e715d99a1555dd8b035a5048a88ca5e217029055f446a8917e19e29358d30a1a41a0e14532bae771d4d9a7f24cc3b45e4142035a53440d3401daa3711d6807f742e7123f72da90abd67244a6491dda57c9395300bda2810dc702110000000171feb400000000000000000000000000000164b3f44e2521b677a24eaaa6bcc3b795e0637f92e8b2b1b12e13982aca95d8c8",
+    "block_header": {
+      "block_size": 2440,
+      "block_weight": 2440,
+      "cumulative_difficulty": 57827456135804978,
+      "cumulative_difficulty_top64": 0,
+      "depth": 4672,
+      "difficulty": 3110936897,
+      "difficulty_top64": 0,
+      "hash": "87005e06b852faa16ccb2be50b8dbb7e9d7ae2d1f001c2d7484d202d2ba7d466",
+      "height": 905998,
+      "long_term_weight": 176470,
+      "major_version": 11,
+      "miner_tx_hash": "75d1030cf50aebc7e15267c3d4c95d5923b95d5488ae00ec68ee6bd70f18dfa2",
+      "minor_version": 11,
+      "nonce": 595231,
+      "num_txes": 1,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "a64cb251dfdb750327f381f3d5669b769411bad27865663db7e5b46a01f016bf",
+      "pricing_record": {
+        "moving_average": 109808950000,
+        "reserve": 566273020000,
+        "reserve_ma": 537826170000,
+        "reserve_ratio": 1629237080000,
+        "reserve_ratio_ma": 1522713340000,
+        "signature": "d5c20491451a5a3f070e85326de51a7cc2234f9b96c2fadae5c267576bba87c32b11d341f43559fba65957240e97e53ac124583daec8c024a3a89d8f2be7438c",
+        "spot": 115736710000,
+        "stable": 8640300900000,
+        "stable_ma": 9173102000000,
+        "timestamp": 1794486674,
+        "yield_price": 1995233720000
+      },
+      "reward": 3851782784019,
+      "timestamp": 1794486674,
+      "wide_cumulative_difficulty": "0xcd71c3d53d3832",
+      "wide_difficulty": "0xb96d2141"
+    },
+    "credits": 0,
+    "json": "{\n  \"major_version\": 11, \n  \"minor_version\": 11, \n  \"timestamp\": 1794486674, \n  \"prev_id\": \"a64cb251dfdb750327f381f3d5669b769411bad27865663db7e5b46a01f016bf\", \n  \"nonce\": 595231, \n  \"pricing_record\": \"700b72f21a000000f09a1f9119000000a0de10badb07000080777cc757080000609080d8830000009014f0387d000000c0ef18567b01000060a8c98862010000c076328dd001000092b1f56a00000000d5c20491451a5a3f070e85326de51a7cc2234f9b96c2fadae5c267576bba87c32b11d341f43559fba65957240e97e53ac124583daec8c024a3a89d8f2be7438c\", \n  \"miner_tx\": {\n    \"version\": 3, \n    \"unlock_time\": 906058, \n    \"vin\": [ {\n        \"gen\": {\n          \"height\": 905998\n        }\n      }\n    ], \n    \"vout\": [ {\n        \"amount\": 3851732939143, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"74325178e2785d87eb1745d75445d462468dcfc44ddf5c66e715d99a1555dd8b\", \n            \"asset_type\": \"ZPH\", \n            \"view_tag\": \"a8\"\n          }\n        }\n      }, {\n        \"amount\": 49844876, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"9055f446a8917e19e29358d30a1a41a0e14532bae771d4d9a7f24cc3b45e4142\", \n            \"asset_type\": \"ZSD\", \n            \"view_tag\": \"0d\"\n          }\n        }\n      }\n    ], \n    \"extra\": [ 1, 218, 163, 113, 29, 104, 7, 247, 66, 231, 18, 63, 114, 218, 144, 171, 214, 114, 68, 166, 73, 29, 218, 87, 201, 57, 83, 0, 189, 162, 129, 13, 199, 2, 17, 0, 0, 0, 1, 113, 254, 180, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n    ], \n    \"pricing_record_height\": 0, \n    \"amount_burnt\": 0, \n    \"amount_minted\": 0, \n    \"rct_signatures\": {\n      \"type\": 0\n    }\n  }, \n  \"tx_hashes\": [ \"64b3f44e2521b677a24eaaa6bcc3b795e0637f92e8b2b1b12e13982aca95d8c8\"\n  ]\n}",
+    "miner_tx_hash": "75d1030cf50aebc7e15267c3d4c95d5923b95d5488ae00ec68ee6bd70f18dfa2",
+    "status": "OK",
+    "top_hash": "",
+    "tx_hashes": ["64b3f44e2521b677a24eaaa6bcc3b795e0637f92e8b2b1b12e13982aca95d8c8"],
+    "untrusted": false
+  }
+}

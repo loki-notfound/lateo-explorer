@@ -1,0 +1,6 @@
+# Local settings, databases and caches never belong in the repository.
+settings.php
+*.sqlite
+*.sqlite-*
+/data/
+/cache/

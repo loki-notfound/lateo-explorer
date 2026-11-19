@@ -1,0 +1,34 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "assets": "675967368661860429",
+    "assets_ma": "0",
+    "equity": "333020368715177296",
+    "equity_ma": "0",
+    "height": 910671,
+    "hf_version": 11,
+    "liabilities": "342946999946683133",
+    "num_reserves": "3834835868047878148",
+    "num_stables": "342946999946683133",
+    "num_zyield": "142308554418364418",
+    "pr": {
+      "moving_average": 129052650000,
+      "reserve": 667920890000,
+      "reserve_ma": 659653620000,
+      "reserve_ratio": 1971054120000,
+      "reserve_ratio_ma": 1954237800000,
+      "signature": "840df3f9622e8a185b540e0161df615b45a288571f61b9340794fca6aecd2f00c20d22775a446d3c80868a23d167a02d10a3fd510b67eb2869e41dfc5e3dbd23",
+      "spot": 130016550000,
+      "stable": 7691328520000,
+      "stable_ma": 7781078810000,
+      "timestamp": 1795048733,
+      "yield_price": 1995604220000
+    },
+    "reserve_ratio": "1.971055",
+    "reserve_ratio_ma": "1.954392",
+    "status": "OK",
+    "zeph_reserve": "5199087105925056692",
+    "zyield_reserve": "283991552043465465"
+  }
+}

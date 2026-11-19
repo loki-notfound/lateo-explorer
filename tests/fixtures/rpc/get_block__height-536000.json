@@ -1,0 +1,50 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "blob": "0b0bece5bac206fc1ed777308322c172ff6a8c3703a3038b9fb39adedef2208384de492e29a112a64a5590402eb47921010000208b82b11a01000050c62945bb00000000542edbbf00000080e54d12c5010000807686d96601000090c12d05fc06000070c3a8b7160500006038d68262010000ecb24e680000000083eeb98aff9b195afc313c6d8fb473b1e75d99ad1d2398419868154e7dc26e4b463f081ab4bd65f37e4001022448e76fc40b06bedfae625ee8d33b5d20a9ec2403fcdb2001ffc0db2002e1ecfde699c20102cb6f55c37766cceb31e2bdba81f1775b369c48b1c6829bfc467c83accef32f38035a50488e80c08485e6cfc4d51a02e8384a6deabe7c82aae7397be61eb11069918d4294560045f06fd25a1e911b32035a5048445501d48932216afe875d5bf0f916a1160413396133daba42ffd6fb22907e33afa218021100000007292c6c0000000000000000000001df65d53880aa6e9fc51cf5b04d74dd33cfb13851493a135bd7e920653ad6153d0000000000",
+    "block_header": {
+      "block_size": 192,
+      "block_weight": 192,
+      "cumulative_difficulty": 54422293381247460,
+      "cumulative_difficulty_top64": 0,
+      "depth": 374670,
+      "difficulty": 16533433182,
+      "difficulty_top64": 0,
+      "hash": "33ee82a6ee048d66355eac94d61e86471f4f1ff703cf7769fcada0bd36b28d6f",
+      "height": 536000,
+      "long_term_weight": 176470,
+      "major_version": 11,
+      "miner_tx_hash": "cac7f5bd918a9d55fa0071cb01007e1e4471734878bbec896d762a69df0489c1",
+      "minor_version": 11,
+      "nonce": 2421508774,
+      "num_txes": 0,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "fc1ed777308322c172ff6a8c3703a3038b9fb39adedef2208384de492e29a112",
+      "pricing_record": {
+        "moving_average": 1214158900000,
+        "reserve": 1945927280000,
+        "reserve_ma": 1541247760000,
+        "reserve_ratio": 7679488410000,
+        "reserve_ratio_ma": 5595128710000,
+        "signature": "83eeb98aff9b195afc313c6d8fb473b1e75d99ad1d2398419868154e7dc26e4b463f081ab4bd65f37e4001022448e76fc40b06bedfae625ee8d33b5d20a9ec24",
+        "spot": 1243287400000,
+        "stable": 804319250000,
+        "stable_ma": 824016000000,
+        "timestamp": 1749988076,
+        "yield_price": 1522613500000
+      },
+      "reward": 1921656672716101217,
+      "timestamp": 1749988076,
+      "wide_cumulative_difficulty": "0xc158c998d9f1e4",
+      "wide_difficulty": "0x3d9782b5e"
+    },
+    "credits": 0,
+    "json": "{\n  \"major_version\": 11, \n  \"minor_version\": 11, \n  \"timestamp\": 1749988076, \n  \"prev_id\": \"fc1ed777308322c172ff6a8c3703a3038b9fb39adedef2208384de492e29a112\", \n  \"nonce\": 2421508774, \n  \"pricing_record\": \"402eb47921010000208b82b11a01000050c62945bb00000000542edbbf00000080e54d12c5010000807686d96601000090c12d05fc06000070c3a8b7160500006038d68262010000ecb24e680000000083eeb98aff9b195afc313c6d8fb473b1e75d99ad1d2398419868154e7dc26e4b463f081ab4bd65f37e4001022448e76fc40b06bedfae625ee8d33b5d20a9ec24\", \n  \"miner_tx\": {\n    \"version\": 3, \n    \"unlock_time\": 536060, \n    \"vin\": [ {\n        \"gen\": {\n          \"height\": 536000\n        }\n      }\n    ], \n    \"vout\": [ {\n        \"amount\": 6672716101217, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"cb6f55c37766cceb31e2bdba81f1775b369c48b1c6829bfc467c83accef32f38\", \n            \"asset_type\": \"ZPH\", \n            \"view_tag\": \"8e\"\n          }\n        }\n      }, {\n        \"amount\": 1921650000000000000, \n        \"target\": {\n          \"tagged_key\": {\n            \"key\": \"e8384a6deabe7c82aae7397be61eb11069918d4294560045f06fd25a1e911b32\", \n            \"asset_type\": \"ZPH\", \n            \"view_tag\": \"44\"\n          }\n        }\n      }\n    ], \n    \"extra\": [ 1, 212, 137, 50, 33, 106, 254, 135, 93, 91, 240, 249, 22, 161, 22, 4, 19, 57, 97, 51, 218, 186, 66, 255, 214, 251, 34, 144, 126, 51, 175, 162, 24, 2, 17, 0, 0, 0, 7, 41, 44, 108, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 223, 101, 213, 56, 128, 170, 110, 159, 197, 28, 245, 176, 77, 116, 221, 51, 207, 177, 56, 81, 73, 58, 19, 91, 215, 233, 32, 101, 58, 214, 21, 61\n    ], \n    \"pricing_record_height\": 0, \n    \"amount_burnt\": 0, \n    \"amount_minted\": 0, \n    \"rct_signatures\": {\n      \"type\": 0\n    }\n  }, \n  \"tx_hashes\": [ ]\n}",
+    "miner_tx_hash": "cac7f5bd918a9d55fa0071cb01007e1e4471734878bbec896d762a69df0489c1",
+    "status": "OK",
+    "top_hash": "",
+    "untrusted": false
+  }
+}

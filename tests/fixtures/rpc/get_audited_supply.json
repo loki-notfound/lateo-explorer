@@ -1,0 +1,26 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "status": "OK",
+    "supply_tally": [{
+      "amount": "12406707323459691262",
+      "currency_label": "ZPH"
+    },{
+      "amount": "342946999946683133",
+      "currency_label": "ZSD"
+    },{
+      "amount": "3834835868047878148",
+      "currency_label": "ZRS"
+    },{
+      "amount": "142308554418364418",
+      "currency_label": "ZYS"
+    },{
+      "amount": "5199087105925056692",
+      "currency_label": "DJED"
+    },{
+      "amount": "283991552043465465",
+      "currency_label": "YIELD"
+    }]
+  }
+}

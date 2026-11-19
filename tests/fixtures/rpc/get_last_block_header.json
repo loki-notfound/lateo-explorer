@@ -1,0 +1,47 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "block_header": {
+      "block_size": 111,
+      "block_weight": 111,
+      "cumulative_difficulty": 57841393093886672,
+      "cumulative_difficulty_top64": 0,
+      "depth": 0,
+      "difficulty": 2657238395,
+      "difficulty_top64": 0,
+      "hash": "64fc1da25acfdb419672897b86ba78cfb79e4175ad2c58e725a85acefd439c91",
+      "height": 910670,
+      "long_term_weight": 176470,
+      "major_version": 11,
+      "miner_tx_hash": "e15ed5bff174edea01673448b430560556ada301fe38bc8eb8f797dd0d3ac135",
+      "minor_version": 11,
+      "nonce": 125832,
+      "num_txes": 0,
+      "orphan_status": false,
+      "pow_hash": "",
+      "prev_hash": "81877cfcc48fbe6b9be4f4f9ec8c944570d39c5f82aa3a6faaafc6d0713a0933",
+      "pricing_record": {
+        "moving_average": 129052650000,
+        "reserve": 667920890000,
+        "reserve_ma": 659653620000,
+        "reserve_ratio": 1971054120000,
+        "reserve_ratio_ma": 1954237800000,
+        "signature": "840df3f9622e8a185b540e0161df615b45a288571f61b9340794fca6aecd2f00c20d22775a446d3c80868a23d167a02d10a3fd510b67eb2869e41dfc5e3dbd23",
+        "spot": 130016550000,
+        "stable": 7691328520000,
+        "stable_ma": 7781078810000,
+        "timestamp": 1795048733,
+        "yield_price": 1995604220000
+      },
+      "reward": 3834609471040,
+      "timestamp": 1795048735,
+      "wide_cumulative_difficulty": "0xcd7e70c8acc2d0",
+      "wide_difficulty": "0x9e623d7b"
+    },
+    "credits": 0,
+    "status": "OK",
+    "top_hash": "",
+    "untrusted": false
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "id": "0",
+  "jsonrpc": "2.0",
+  "result": {
+    "current_height": 910671,
+    "hard_forks": [{
+      "height": 1,
+      "hf_version": 1
+    },{
+      "height": 2000,
+      "hf_version": 2
+    },{
+      "height": 89300,
+      "hf_version": 3
+    },{
+      "height": 294000,
+      "hf_version": 4
+    },{
+      "height": 295000,
+      "hf_version": 5
+    },{
+      "height": 360000,
+      "hf_version": 6
+    },{
+      "height": 433000,
+      "hf_version": 7
+    },{
+      "height": 481500,
+      "hf_version": 8
+    },{
+      "height": 508000,
+      "hf_version": 9
+    },{
+      "height": 511000,
+      "hf_version": 10
+    },{
+      "height": 536000,
+      "hf_version": 11
+    }],
+    "release": false,
+    "status": "OK",
+    "untrusted": false,
+    "version": 196621
+  }
+}
