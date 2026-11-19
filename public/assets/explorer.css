@@ -1,0 +1,8 @@
+/* Additions of explorer.lateo.dev to the lateo house style. content.css, forms.css, data.css and
+   print.css are unchanged copies of the house style (see README.md). Only what the style lacks
+   is here: the spacing of the links to the neighbouring blocks, a list of hashes and the lockup
+   as a block. Keep this file small and carry lasting additions back to the style. */
+.ex-block-nav{justify-content:space-between}
+.ex-list{list-style:none;padding:0;margin:0}
+.ex-list li{margin:.25rem 0}
+.ex-lockup,.ex-lockup img{display:block}

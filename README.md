@@ -9,9 +9,10 @@ ZephyrProtocol.
 
 ## Status
 
-In development, not deployed. What exists so far is the groundwork: the settings
-loader, the RPC client with its fixed list of calls, a shared file cache, the
-mapping of asset names, and their tests. There are no pages and no indexer yet.
+In development, not deployed. What exists: the settings loader, the RPC client with its fixed
+list of calls, a shared file cache, the mapping of asset names, the header indexer, and the first
+pages: home, block, status, search and about. Pages for transactions, the mempool, supply and
+graphs are not built yet.
 
 ## Principles
 
@@ -31,6 +32,15 @@ mapping of asset names, and their tests. There are no pages and no indexer yet.
 PHP 8.4 with the `curl`, `gmp`, `json` and `pdo_sqlite` extensions (`gmp` compares
 cumulative difficulties). No Composer and no other packages: `src/autoload.php` is
 a small autoloader for the namespace `Lateo\Explorer`.
+
+## Running the site
+
+`public/index.php` is the front controller. A deploy stub may define `LATEO_EXPLORER_ROOT` (the
+repository) and `LATEO_EXPLORER_SETTINGS` (the settings file) and then require it; otherwise the
+root is the directory above `public/` and the settings path comes from the environment variable
+`LATEO_EXPLORER_SETTINGS`. The pages read the database that the indexer fills; a few facts are
+read live from a node through the shared cache (see the method page of the site). The site sets
+no cookie and loads no script.
 
 ## Settings
 
@@ -58,6 +68,13 @@ The layout:
 - `src/Indexer/`: the header indexer, the supply snapshot and the cron entry
   point's application class.
 - `src/Support/`: the clock.
+- `src/Web/`: the router (`Application`), the request and response objects, the text formats
+  (`Format`), the live reads through the cache (`LiveData`) and one class per page (`Page/`).
+- `views/`: the pages as plain PHP; every printed value goes through `lt_esc()` or `Html`.
+- `style/`: the PHP files of the lateo house style, unchanged copies (version 0.2.0).
+- `public/`: the webroot's files: `index.php` (the front controller, the only place that sends
+  output), `.htaccess`, `robots.txt` and `assets/` (the style's CSS and marks, and a small
+  stylesheet of its own; see `public/assets/README.md`).
 - `bin/indexer.php`: the indexer, run by cron with `--settings=<path>`.
 - `tests/`: the tests and the recorded fixtures.
 

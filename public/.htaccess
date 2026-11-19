@@ -1,0 +1,21 @@
+# Routes every path that is not an existing file to index.php, refuses dot files and sets
+# nosniff on static files. The pages' own headers (Content Security Policy and others) come
+# from PHP.
+Options -Indexes
+DirectoryIndex index.php
+
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|svg|png|ico|txt|webmanifest)$">
+    Header always set X-Content-Type-Options "nosniff"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ index.php [L]
+</IfModule>
