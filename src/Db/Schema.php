@@ -160,7 +160,7 @@ final class Schema
                     CHECK ((dest_asset = \'unknown\') = (dest_gen = \'unknown\')),
                     UNIQUE (height, idx)
                 ) WITHOUT ROWID',
-                'CREATE INDEX transactions_height ON transactions (height)',
+                // No separate index on height: UNIQUE (height, idx) serves every query by height.
 
                 // The recomputation of conversions and audits (ConversionRule), one row per
                 // transaction that needs one. The table is derived: it can be emptied and

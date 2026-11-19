@@ -110,7 +110,14 @@ final class TransactionStoreTest extends IndexerTestBase
             'hash', 'height', 'idx', 'version', 'rct_type', 'source_asset', 'source_gen', 'dest_asset', 'dest_gen',
             'tx_type', 'n_inputs', 'n_outputs', 'fee', 'pricing_record_height', 'amount_burnt', 'amount_minted',
         ], $cols);
-        $this->assertSame(1, (int) $this->db->value("SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'transactions_height'"));
+        $this->assertSame(0, (int) $this->db->value("SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'transactions_height'"));
+        // The unique (height, idx) index serves the rollback and every query by height.
+        $plan = implode(' ', array_map(
+            static fn (array $r): string => (string) $r['detail'],
+            $this->db->all('EXPLAIN QUERY PLAN DELETE FROM transactions WHERE height > 5'),
+        ));
+        $this->assertStringContains('INDEX', $plan, $plan);
+        $this->assertStringContains('height>?', $plan, $plan);
         $this->assertSame('hash', $this->db->value("SELECT name FROM pragma_table_info('transactions') WHERE pk = 1"));
     }
 
