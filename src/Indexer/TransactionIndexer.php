@@ -31,8 +31,10 @@ use Lateo\Explorer\Support\Clock;
  *   none in the pool, each entry's tx_hash equal to the hash asked and its block_height equal
  *   to the block's (a pool entry or another height means the chain moved: the run stops with
  *   a note);
- * - the rows of the whole blocks of a group are stored with the new mark in one transaction;
- *   never a part of a block;
+ * - the rows of the whole blocks of a group are stored with the new mark and with the
+ *   conversion checks of the rows (ConversionRule, from the stored pricing records) in one
+ *   transaction; never a part of a block. A mismatch does not stop the run and is not worded
+ *   anywhere: it is a row in conversion_checks and a count in the log line;
  * - the run's time is the part of run_seconds the header run left; a get_block is not started
  *   once it is used up, also not after the pause before it (the /get_transactions call for
  *   what was already fetched is made, so that the work is stored).
@@ -52,6 +54,8 @@ final class TransactionIndexer
     private ?int $to = null;
     private int $blocks = 0;
     private int $transactions = 0;
+    /** @var array{checks:int,match:int,mismatch:int,not_recomputed:int} */
+    private array $checks = ['checks' => 0, 'match' => 0, 'mismatch' => 0, 'not_recomputed' => 0];
     private string $outcome = TxSummary::COMPLETE;
     private string $note = '';
 
@@ -74,6 +78,7 @@ final class TransactionIndexer
         $this->calls = 0;
         $this->from = $this->to = null;
         $this->blocks = $this->transactions = 0;
+        $this->checks = ['checks' => 0, 'match' => 0, 'mismatch' => 0, 'not_recomputed' => 0];
         $this->outcome = TxSummary::COMPLETE;
         $this->note = '';
 
@@ -95,6 +100,10 @@ final class TransactionIndexer
             $this->transactions,
             $this->client->attempts() - $attemptsBefore,
             $this->note,
+            $this->checks['checks'],
+            $this->checks['match'],
+            $this->checks['mismatch'],
+            $this->checks['not_recomputed'],
         );
     }
 
@@ -332,7 +341,10 @@ final class TransactionIndexer
      */
     private function record(array $rows, int $mark, array $blocks, int $transactions): void
     {
-        $this->store->storeBlocks($rows, $mark);
+        $counts = $this->store->storeBlocks($rows, $mark);
+        foreach ($counts as $key => $n) {
+            $this->checks[$key] += $n;
+        }
         $this->from ??= $blocks[0]['height'];
         $this->to = $mark;
         $this->blocks += count(array_filter($blocks, static fn (array $b): bool => $b['num_txes'] > 0));

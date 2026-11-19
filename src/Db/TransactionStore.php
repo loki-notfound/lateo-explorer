@@ -50,12 +50,16 @@ final class TransactionStore
     /**
      * Store the rows of whole blocks and move the mark to $mark in one transaction. $mark is
      * the height of the last block of the group (a block without transactions has no rows).
+     * The checks of the rows that need one (ConversionCheckStore) are stored in the same
+     * transaction. The record a conversion refers to is at most 10 blocks below it, so it is
+     * stored by then; if it is not, the check says pr_missing.
      *
      * @param list<Transaction> $rows
+     * @return array{checks:int,match:int,mismatch:int,not_recomputed:int}
      */
-    public function storeBlocks(array $rows, int $mark): void
+    public function storeBlocks(array $rows, int $mark): array
     {
-        $this->db->transaction(function () use ($rows, $mark): void {
+        return $this->db->transaction(function () use ($rows, $mark): array {
             foreach ($rows as $t) {
                 if ($t->height > $mark) {
                     throw new \LogicException('a row above the mark');
@@ -74,11 +78,19 @@ final class TransactionStore
                     ],
                 );
             }
+            $counts = (new ConversionCheckStore($this->db))->checkAndStore(array_map(
+                static fn (Transaction $t): array => [
+                    'hash' => $t->hash, 'height' => $t->height, 'type' => $t->type,
+                    'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => $t->pricingRecordHeight,
+                ],
+                $rows,
+            ));
             $this->db->exec(
                 'INSERT INTO meta (key, value) VALUES (?, ?)
                  ON CONFLICT (key) DO UPDATE SET value = excluded.value',
                 [self::MARK_KEY, (string) $mark],
             );
+            return $counts;
         });
     }
 }

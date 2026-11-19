@@ -203,6 +203,27 @@ final class IndexerApplicationTest extends IndexerTestBase
         return $server;
     }
 
+    public function testTheLogLineCountsTheChecksOfTheRun(): void
+    {
+        $this->limits = ['tx_backfill_enabled' => true];
+        $server = $this->serveTx(FakeChain::synthetic(0, 30));
+        // The first transaction of every block carries a burnt amount: a transfer with conversion fields.
+        $server->entryFor = static fn (string $hash, int $height, int $idx): array => TxServer::entry(
+            $hash,
+            $height,
+            $idx === 0 ? TxServer::asJson(['amount_burnt' => 5]) : TxServer::asJson(),
+        );
+        $this->assertSame(0, $this->app()->run(), $this->read($this->err));
+        $out = $this->read($this->out);
+        $this->assertStringContains(' txs=30 txcalls=21 checks=20 match=0 mismatch=0 notrecomputed=20' . "\n", $out);
+        $this->assertSame(20, $this->count('conversion_checks'));
+        $this->assertSame(20, (int) $this->db->value("SELECT count(*) FROM conversion_checks WHERE reason = 'transfer_with_conversion_fields'"));
+        // The next run has nothing new to check.
+        $this->app()->run();
+        $lines = explode("\n", trim($this->read($this->out)));
+        $this->assertStringContains(' checks=0 match=0 mismatch=0 notrecomputed=0', $lines[1]);
+    }
+
     public function testTheTransactionIndexerIsOffByDefaultAndAsksNothing(): void
     {
         $server = $this->serveTx(FakeChain::synthetic(0, 30));
@@ -224,7 +245,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->assertSame(0, $this->app()->run(), $this->read($this->err));
         $out = $this->read($this->out);
         $this->assertSame(1, preg_match(
-            '/\A\S+ mode=tip from=0 to=30 headers=31 node=own-a outcome=complete reorgs=0 requests=3 snapshot=stored tx=complete txfrom=0 txto=30 txblocks=20 txs=30 txcalls=21\n\z/',
+            '/\A\S+ mode=tip from=0 to=30 headers=31 node=own-a outcome=complete reorgs=0 requests=3 snapshot=stored tx=complete txfrom=0 txto=30 txblocks=20 txs=30 txcalls=21 checks=0 match=0 mismatch=0 notrecomputed=0\n\z/',
             $out,
         ), 'log line: ' . $out);
         $this->assertSame(30, $this->count('transactions'));
@@ -236,7 +257,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         // The next run has nothing to do and says so.
         $this->app()->run();
         $lines = explode("\n", trim($this->read($this->out)));
-        $this->assertStringContains(' tx=complete txfrom=- txto=- txblocks=0 txs=0 txcalls=0', $lines[1]);
+        $this->assertStringContains(' tx=complete txfrom=- txto=- txblocks=0 txs=0 txcalls=0 checks=0 match=0 mismatch=0 notrecomputed=0', $lines[1]);
     }
 
     public function testABackfillRunSkipsTheTransactionWork(): void

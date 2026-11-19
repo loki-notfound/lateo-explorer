@@ -51,6 +51,17 @@ final readonly class Asset
         };
     }
 
+    /** The string the chain used for this asset (the inverse of fromChain), null for an unknown one. */
+    public function chainName(): ?string
+    {
+        $old = ['ZPH' => 'ZEPH', 'ZSD' => 'ZEPHUSD', 'ZRS' => 'ZEPHRSV', 'ZYS' => 'ZYIELD'];
+        return match ($this->generation) {
+            Generation::Old => $old[$this->ticker] ?? null,
+            Generation::New => in_array($this->ticker, self::TICKERS, true) ? $this->ticker : null,
+            Generation::Unknown => null,
+        };
+    }
+
     public function isKnown(): bool
     {
         return $this->ticker !== self::UNKNOWN;

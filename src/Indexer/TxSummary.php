@@ -32,6 +32,11 @@ final readonly class TxSummary
         public int $calls = 0,
         /** A short note without addresses: why the run stopped or failed. */
         public string $note = '',
+        /** Conversion checks stored in this run, and their verdicts. */
+        public int $checks = 0,
+        public int $matches = 0,
+        public int $mismatches = 0,
+        public int $notRecomputed = 0,
     ) {
     }
 
@@ -52,13 +57,17 @@ final readonly class TxSummary
             return 'tx=' . $this->outcome;
         }
         return sprintf(
-            'tx=%s txfrom=%s txto=%s txblocks=%d txs=%d txcalls=%d',
+            'tx=%s txfrom=%s txto=%s txblocks=%d txs=%d txcalls=%d checks=%d match=%d mismatch=%d notrecomputed=%d',
             $this->outcome,
             $this->fromHeight ?? '-',
             $this->toHeight ?? '-',
             $this->blocks,
             $this->transactions,
             $this->calls,
+            $this->checks,
+            $this->matches,
+            $this->mismatches,
+            $this->notRecomputed,
         );
     }
 }

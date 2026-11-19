@@ -356,6 +356,47 @@ final class PolicyTest extends WebTestBase
         }
     }
 
+    public function testTheRecomputeAndVectorCommandsNeverCallANode(): void
+    {
+        $root = self::root();
+        $files = [
+            $root . '/bin/recompute.php', $root . '/bin/vectors.php',
+            $root . '/src/Cli/RecomputeApplication.php', $root . '/src/Cli/VectorsApplication.php',
+            $root . '/src/Chain/ConversionRule.php', $root . '/src/Chain/ConversionResult.php',
+            $root . '/src/Db/ConversionCheckStore.php',
+        ];
+        foreach ($files as $file) {
+            $code = $this->read($file);
+            foreach (['Rpc\\', 'RpcClient', 'RpcMethod', 'Transport', 'CurlTransport', 'Profile::', 'CallLimiter', 'curl_', 'fsockopen', 'stream_socket', 'http://', 'https://', 'allow_url', 'node.lateo.dev', 'IndexerApplication', 'HeaderIndexer', 'TransactionIndexer'] as $word) {
+                $this->assertStringNotContains($word, $code, basename($file) . ' must not use ' . $word);
+            }
+            $stripped = preg_replace('/\$this->db->exec|\$db->exec|@fopen\(\$this->lockFile \?\? \$this->config->lockFile, \'c\'\)/', '', $code) ?? '';
+            $this->assertSame(0, preg_match('/\b(file_get_contents|fopen|file_put_contents|exec|shell_exec|system|passthru|proc_open|popen)\s*\(/', $stripped), basename($file) . ' opens no file but the lock and runs no program');
+        }
+        // The pure rule has no I/O at all and no database.
+        foreach (['ConversionRule', 'ConversionResult'] as $class) {
+            $code = $this->read($root . '/src/Chain/' . $class . '.php');
+            foreach (['Database', 'PDO', 'fopen', 'fwrite', 'echo', 'print', 'time(', 'random', 'getenv', '$_SERVER'] as $word) {
+                $this->assertStringNotContains($word, $code, $class . ' is pure: ' . $word);
+            }
+        }
+        // The vectors command reads through a read-only connection and writes nothing to the database.
+        $vectors = $this->read($root . '/bin/vectors.php') . $this->read($root . '/src/Cli/VectorsApplication.php');
+        $this->assertStringContains('Database::openReadOnly', $vectors);
+        $this->assertStringNotContains('openWritable', $vectors);
+        $this->assertSame(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\b/', $this->read($root . '/src/Cli/VectorsApplication.php')));
+        // The recompute command takes the indexer's lock before it opens the database.
+        $recompute = $this->read($root . '/src/Cli/RecomputeApplication.php');
+        $this->assertSame(1, preg_match('/flock\(\$lock, LOCK_EX \| LOCK_NB\).*return \$this->locked\(\)/s', $recompute));
+        $this->assertSame(1, substr_count($recompute, '($this->openDatabase)()'));
+        $this->assertTrue(strpos($recompute, 'LOCK_NB') < strpos($recompute, '($this->openDatabase)()'));
+        $this->assertStringContains('config->lockFile', $recompute);
+        // The summary is built from counts only: no hash column is selected for it.
+        $summary = substr($recompute, (int) strpos($recompute, 'private function summary'));
+        $this->assertStringNotContains('c.tx_hash,', $summary);
+        $this->assertSame(0, preg_match('/SELECT\s+(?:(?!FROM).)*hash/s', $summary));
+    }
+
     public function testTheRpcAllowListHoldsOnlyReads(): void
     {
         $names = array_map(static fn (RpcMethod $m): string => $m->value, RpcMethod::cases());

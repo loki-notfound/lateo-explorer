@@ -14,8 +14,8 @@ namespace Lateo\Explorer\Db;
  * is never stored (the indexer stops with an error instead). Difficulties are 128 bit and are
  * stored as decimal TEXT. Times are Unix seconds (UTC).
  *
- * Version 2 adds the transactions table and, in meta, the key tx_indexed_height (written by
- * the transaction indexer, lowered by a rollback). Rolling the code back to version 1 is not
+ * Version 2 adds the transactions table, the derived table conversion_checks and, in meta,
+ * the key tx_indexed_height (written by the transaction indexer, lowered by a rollback). Rolling the code back to version 1 is not
  * supported: a database of version 2 is refused by version 1 code ("newer than this code").
  */
 final class Schema
@@ -161,6 +161,33 @@ final class Schema
                     UNIQUE (height, idx)
                 ) WITHOUT ROWID',
                 'CREATE INDEX transactions_height ON transactions (height)',
+
+                // The recomputation of conversions and audits (ConversionRule), one row per
+                // transaction that needs one. The table is derived: it can be emptied and
+                // refilled from transactions, blocks and pricing_records (bin/recompute.php).
+                // reason is 'checked' for a match and a mismatch, otherwise why nothing was
+                // recomputed. The numbers are decimal text (they can pass 64 bits); they are null
+                // when nothing was computed. A rollback deletes the rows above the fork first.
+                'CREATE TABLE conversion_checks (
+                    tx_hash TEXT PRIMARY KEY REFERENCES transactions (hash),
+                    height INTEGER NOT NULL,
+                    rule_version INTEGER NOT NULL,
+                    hard_fork INTEGER NOT NULL,
+                    verdict TEXT NOT NULL CHECK (verdict IN (\'match\', \'mismatch\', \'not_recomputed\')),
+                    reason TEXT NOT NULL CHECK (reason IN (\'checked\', \'unknown_type\', \'transfer_with_conversion_fields\',
+                        \'type_not_allowed\', \'age_out_of_window\', \'pr_missing\', \'pr_incomplete\', \'invalid_value\')),
+                    price_field TEXT CHECK (price_field IS NULL OR price_field IN (\'stable\', \'stable_ma\', \'reserve\', \'reserve_ma\', \'yield_price\')),
+                    price TEXT,
+                    r0 TEXT,
+                    fee TEXT,
+                    rate TEXT,
+                    expected TEXT,
+                    remainder TEXT,
+                    CHECK ((verdict = \'not_recomputed\') = (reason <> \'checked\')),
+                    CHECK ((verdict = \'not_recomputed\') = (expected IS NULL))
+                ) WITHOUT ROWID',
+                'CREATE INDEX conversion_checks_height ON conversion_checks (height)',
+                'CREATE INDEX conversion_checks_verdict ON conversion_checks (verdict, hard_fork)',
             ],
         ];
     }
