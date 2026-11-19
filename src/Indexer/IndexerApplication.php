@@ -12,7 +12,7 @@ use Lateo\Explorer\Db\Database;
 use Lateo\Explorer\Db\RunStore;
 use Lateo\Explorer\Db\Schema;
 use Lateo\Explorer\Db\SnapshotStore;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\RpcException;
@@ -88,7 +88,7 @@ final class IndexerApplication
             $this->config,
             $this->transport,
             Profile::Indexer,
-            new FallbackLimiter($cacheDir, $this->config->limits->fallbackCallsPerMinute, $this->clock),
+            CallLimiter::fallback($cacheDir, $this->config->limits->fallbackCallsPerMinute, $this->clock),
             $this->clock,
         );
         $chain = new ChainStore($db);
@@ -114,7 +114,7 @@ final class IndexerApplication
                 new SnapshotStore($db),
                 $this->clock,
                 $this->snapshotMayUseFallback,
-            ))->run()->value;
+            ))->run($summary->tipNode)->value;
         }
 
         (new FileCache($cacheDir, $this->clock))->sweep(self::CACHE_MAX_FILES, self::CACHE_KEEP_STALE_SECONDS);

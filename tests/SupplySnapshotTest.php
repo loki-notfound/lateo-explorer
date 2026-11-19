@@ -134,4 +134,42 @@ final class SupplySnapshotTest extends IndexerTestBase
         $this->assertSame(21, $store->latestOnChain('circulating')['height'] ?? null);
         $this->assertSame($b->hashAt(21), $store->latestOnChain('audited')['hash'] ?? null);
     }
+
+    public function testTheNodeThatGaveTheTipIsAskedFirstAndGivesTheWholeSnapshot(): void
+    {
+        // The first own node lags; the second leads and is the node that gave the run's tip.
+        $this->serveWithSupply(FakeChain::synthetic(1, 20), self::A);
+        $lead = FakeChain::synthetic(1, 25);
+        $this->serveWithSupply($lead, self::B);
+        $this->assertSame(SnapshotOutcome::Stored, $this->snapshot()->run('own-b'));
+        $this->assertSame([self::B], array_values(array_unique($this->transport->hosts())));
+        $this->assertSame(25, (int) $this->db->value('SELECT max(height) FROM supply_snapshots'));
+        $this->assertSame($lead->hashAt(25), $this->db->value('SELECT hash FROM supply_snapshots LIMIT 1'));
+        $this->assertSame('own-b', $this->db->value('SELECT node FROM supply_snapshots LIMIT 1'));
+    }
+
+    public function testWithoutAPreferredNodeTheUsualOrderStartsWithTheFirstOwnNode(): void
+    {
+        $this->serveWithSupply(FakeChain::synthetic(1, 20), self::A);
+        $this->serveWithSupply(FakeChain::synthetic(1, 25), self::B);
+        $this->assertSame(SnapshotOutcome::Stored, $this->snapshot()->run());
+        $this->assertSame(20, (int) $this->db->value('SELECT max(height) FROM supply_snapshots'));
+    }
+
+    public function testWhenThePreferredNodeFailsTheUsualOrderApplies(): void
+    {
+        $this->down(self::B);
+        $this->serveWithSupply(FakeChain::synthetic(1, 20), self::A);
+        $this->assertSame(SnapshotOutcome::Stored, $this->snapshot()->run('own-b'));
+        $this->assertSame('own-a', $this->db->value('SELECT node FROM supply_snapshots LIMIT 1'));
+    }
+
+    public function testThePreferredFallbackIsNotUsedWhenTheFallbackIsNotAllowed(): void
+    {
+        $this->serveWithSupply(FakeChain::synthetic(1, 20), self::A);
+        $this->serveWithSupply(FakeChain::synthetic(1, 30), self::F);
+        $this->assertSame(SnapshotOutcome::Stored, $this->snapshot(false)->run('fallback'));
+        $this->assertCount(0, array_filter($this->transport->hosts(), static fn (string $h): bool => $h === self::F));
+        $this->assertSame('own-a', $this->db->value('SELECT node FROM supply_snapshots LIMIT 1'));
+    }
 }

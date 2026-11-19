@@ -22,6 +22,8 @@ final readonly class Limits
         public int $reorgMaxDepth = 100,
         /** Blocks at the tip that are shown as not yet settled. */
         public int $unsettledDepth = 10,
+        /** Web calls to the own nodes per minute, over all processes and page requests. */
+        public int $webOwnCallsPerMinute = 60,
     ) {
     }
 }

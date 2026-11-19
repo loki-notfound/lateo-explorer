@@ -16,8 +16,8 @@ final class ConfigTest extends TestCase
     {
         return [
             'nodes' => [
-                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17777'],
-                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://node-b.example.invalid:17777'],
+                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17767'],
+                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://node-b.example.invalid:17767'],
                 ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://node.lateo.dev'],
             ],
             'database' => '/srv/explorer-data/explorer.sqlite',
@@ -54,6 +54,7 @@ final class ConfigTest extends TestCase
         $this->assertSame(45, $config->limits->runSeconds);
         $this->assertSame(100, $config->limits->reorgMaxDepth);
         $this->assertSame(10, $config->limits->unsettledDepth);
+        $this->assertSame(60, $config->limits->webOwnCallsPerMinute);
     }
 
     public function testMissingSettingsFile(): void
@@ -74,8 +75,8 @@ final class ConfigTest extends TestCase
     public function testTrailingSlashOfUrlIsDropped(): void
     {
         $s = $this->valid();
-        $s['nodes'][0]['url'] = 'http://node-a.example.invalid:17777/';
-        $this->assertSame('http://node-a.example.invalid:17777', Config::fromArray($s)->node('own-a')?->url);
+        $s['nodes'][0]['url'] = 'http://node-a.example.invalid:17767/';
+        $this->assertSame('http://node-a.example.invalid:17767', Config::fromArray($s)->node('own-a')?->url);
     }
 
     public function testKindMustBeOwnOrFallback(): void
@@ -100,7 +101,7 @@ final class ConfigTest extends TestCase
 
     public function testSchemeMustBeHttpOrHttps(): void
     {
-        foreach (['ftp://node-a.example.invalid', 'file:///etc/passwd', 'gopher://x.example.invalid', 'node-a.example.invalid:17777', '//node-a.example.invalid'] as $url) {
+        foreach (['ftp://node-a.example.invalid', 'file:///etc/passwd', 'gopher://x.example.invalid', 'node-a.example.invalid:17767', '//node-a.example.invalid'] as $url) {
             $s = $this->valid();
             $s['nodes'][0]['url'] = $url;
             $this->refused($s, 'nodes[0].url');
@@ -191,6 +192,7 @@ final class ConfigTest extends TestCase
             'run_seconds' => [0, 3601],
             'reorg_max_depth' => [0, 10001],
             'unsettled_depth' => [-1, 10001],
+            'web_own_calls_per_minute' => [0, 601, '60', 60.0],
         ];
         foreach ($bad as $key => $values) {
             foreach ($values as $value) {
@@ -200,11 +202,12 @@ final class ConfigTest extends TestCase
             }
         }
         $s = $this->valid();
-        $s['limits'] = ['page_max_calls' => 1, 'fallback_calls_per_minute' => 300, 'header_batch' => 1, 'backfill_pause_seconds' => 0, 'run_seconds' => 3600, 'reorg_max_depth' => 10000, 'unsettled_depth' => 0];
+        $s['limits'] = ['page_max_calls' => 1, 'fallback_calls_per_minute' => 300, 'header_batch' => 1, 'backfill_pause_seconds' => 0, 'run_seconds' => 3600, 'reorg_max_depth' => 10000, 'unsettled_depth' => 0, 'web_own_calls_per_minute' => 600];
         $limits = Config::fromArray($s)->limits;
         $this->assertSame(1, $limits->pageMaxCalls);
         $this->assertSame(0.0, $limits->backfillPauseSeconds);
         $this->assertSame(10000, $limits->reorgMaxDepth);
+        $this->assertSame(600, $limits->webOwnCallsPerMinute);
     }
 
     public function testUnsettledDepthMustNotExceedReorgDepth(): void

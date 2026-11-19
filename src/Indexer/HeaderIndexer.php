@@ -28,12 +28,15 @@ use Lateo\Explorer\Support\Clock;
  * - while more than BACKFILL_BEHIND blocks behind (backfill mode) asks the own nodes only and
  *   pauses backfill_pause_seconds between calls; closer to the tip (tip mode) the fallback may
  *   answer too;
- * - when a node disagrees with the stored chain (a broken link, or another hash at the tip)
- *   it rolls back only if that node's tip has more cumulative difficulty than the stored top,
- *   as the daemon follows the chain with the most work; a node on a branch with less work ends
- *   the run with an error and changes nothing. A rollback walks back on that node to the
- *   highest block both sides know (the fork point), at most reorg_max_depth deep, and undoes
- *   the chain above it in one transaction (ChainStore::rollbackAbove);
+ * - when the node that gave the run's tip disagrees with the stored chain (a broken link, or
+ *   another hash at the tip) it rolls back only if the tip has more cumulative difficulty than
+ *   the stored top, as the daemon follows the chain with the most work; a branch with less
+ *   work ends the run with an error and changes nothing, and two blocks of equal work end it
+ *   with the outcome "waiting" (changing nothing). A batch of another node that does not link
+ *   never decides a rollback: the run ends with an error (not-tip-node) and changes nothing.
+ *   A rollback walks back on the tip node to the highest block both sides know (the fork
+ *   point), at most reorg_max_depth deep, and undoes the chain above it in one transaction
+ *   (ChainStore::rollbackAbove);
  * - stops between batches when run_seconds is used up.
  *
  * $forcedMode is for a bounded sample run from the public node only (the production indexer
@@ -61,6 +64,7 @@ final class HeaderIndexer
     private ?string $tipNode = null;
     private int $reorgs = 0;
     private string $outcome = RunSummary::COMPLETE;
+    private string $waitingNote = '';
 
     public function __construct(
         private readonly RpcClient $client,
@@ -84,6 +88,7 @@ final class HeaderIndexer
         $this->from = $this->to = $this->node = $this->tip = $this->tipNode = null;
         $this->headers = $this->reorgs = 0;
         $this->outcome = RunSummary::COMPLETE;
+        $this->waitingNote = '';
         $attemptsBefore = $this->client->attempts();
         $note = '';
 
@@ -95,6 +100,10 @@ final class HeaderIndexer
         } catch (RpcException $e) {
             $this->outcome = RunSummary::ERROR;
             $note = 'node: ' . $e->getMessage();
+        }
+
+        if ($this->outcome === RunSummary::WAITING) {
+            $note = $this->waitingNote;
         }
 
         return new RunSummary(
@@ -109,6 +118,7 @@ final class HeaderIndexer
             $note,
             $this->reorgs,
             $this->client->attempts() - $attemptsBefore,
+            $this->tipNode,
         );
     }
 
@@ -128,8 +138,10 @@ final class HeaderIndexer
                 // Caught up. A node on another chain shows up as a different hash at its tip.
                 if ($top !== null && $this->store->hashAt($tip->height) !== null
                     && $this->store->hashAt($tip->height) !== $tip->hash) {
-                    $this->handleReorg($this->tipNode ?? '', $tip->height, true, $tip);
-                    continue;
+                    if ($this->handleReorg($this->tipNode ?? '', $tip->height, true, $tip)) {
+                        continue;
+                    }
+                    return;
                 }
                 return;
             }
@@ -145,9 +157,20 @@ final class HeaderIndexer
             $batch = $this->parseRange($result->data, $next, $end);
 
             if ($top !== null && $batch[0]->prevHash !== $top['hash']) {
-                $nodeTip = $this->tipOf($result->node, $allowFallback);
-                $this->handleReorg($result->node, $top['height'], $allowFallback, $nodeTip);
-                continue;
+                // Only the node that gave the run's tip may decide a rollback: the work of its
+                // tip is the work this run knows. A batch of another node that does not link
+                // changes nothing.
+                if ($result->node !== $this->tipNode) {
+                    throw new IndexerException(
+                        FailureKind::NotTipNode,
+                        'node ' . $result->node . ' served a range that does not link to the stored chain'
+                        . ' and is not the node that gave the tip; nothing was changed',
+                    );
+                }
+                if ($this->handleReorg($result->node, $top['height'], $allowFallback, $this->tip)) {
+                    continue;
+                }
+                return;
             }
 
             $this->store->insertBatch($batch);
@@ -200,15 +223,6 @@ final class HeaderIndexer
     {
         $result = $this->client->call(RpcMethod::GetLastBlockHeader, [], $allowFallback, $label);
         return HeaderParser::parse($result->data['block_header'] ?? null);
-    }
-
-    /** The tip of the node $label: the one of this run when it is the node that gave the tip. */
-    private function tipOf(string $label, bool $allowFallback): Header
-    {
-        if ($label === $this->tipNode && $this->tip !== null) {
-            return $this->tip;
-        }
-        return $this->tipFrom($label, $allowFallback);
     }
 
     /**
@@ -267,17 +281,26 @@ final class HeaderIndexer
 
     /**
      * Undo the stored chain above the fork point found on $label (the node that disagrees),
-     * but only when that node's tip ($nodeTip) has more cumulative difficulty than the stored
-     * top. Otherwise nothing changes and the run ends with an error.
+     * but only when that node's tip ($nodeTip, the tip of this run) has more cumulative
+     * difficulty than the stored top. With equal work nothing changes and the run ends with
+     * the outcome "waiting"; with less work nothing changes and the run ends with an error.
      *
      * @param int $upper the highest stored height that may still be on the common chain
+     * @return bool true when the chain was rolled back and the run goes on, false when the run
+     *              ends (outcome waiting)
      */
-    private function handleReorg(string $label, int $upper, bool $allowFallback, Header $nodeTip): void
+    private function handleReorg(string $label, int $upper, bool $allowFallback, Header $nodeTip): bool
     {
         $top = $this->store->top();
         $work = $this->store->topWork();
         if ($top === null || $work === null) {
-            return;
+            return true;
+        }
+        if (gmp_cmp($nodeTip->cumulativeDifficulty, $work) === 0) {
+            $this->outcome = RunSummary::WAITING;
+            $this->waitingNote = 'node ' . $label . ': two blocks of equal work at height ' . $top['height']
+                . '; waiting for the next block';
+            return false;
         }
         if (!self::moreWork($nodeTip->cumulativeDifficulty, $work)) {
             throw new IndexerException(
@@ -290,6 +313,7 @@ final class HeaderIndexer
         }
         $fork = $this->findFork($label, min($upper, $top['height']), $top['height'], $allowFallback);
         $this->store->rollbackAbove($fork, $label, (int) floor($this->clock->now()));
+        return true;
     }
 
     /**

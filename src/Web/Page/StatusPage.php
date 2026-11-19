@@ -35,19 +35,22 @@ final class StatusPage
                     'name' => (string) $row['name'],
                     'reachable' => (bool) $row['reachable'],
                     'skipped' => (bool) $row['skipped'],
+                    'limited' => (bool) ($row['limited'] ?? false),
                     'height' => $row['height'],
                     'match' => $match,
                 ];
             }
         }
 
+        $run = $index->lastRun();
         $html = $s->view->render('status', [
             'now' => $s->now(),
             'nodes' => $nodes,
             'nodesMessage' => $live->state === LiveState::Ok ? '' : $live->state->message(),
             'nodesStale' => $live->stale,
             'top' => $index->top(),
-            'run' => $index->lastRun(),
+            'run' => $run,
+            'outcomeWords' => $run === null ? '' : self::outcomeWords((string) $run['outcome']),
             'reorg' => $index->lastReorg(),
             'snapshot' => $index->lastSnapshotTime(),
         ]);
@@ -59,5 +62,20 @@ final class StatusPage
             $html,
             'public, max-age=5',
         );
+    }
+
+    /**
+     * The words for the outcome of the last run, from a fixed list: the stored text itself is
+     * never shown (it comes from the database, which the indexer fills from node data).
+     */
+    public static function outcomeWords(string $outcome): string
+    {
+        return match ($outcome) {
+            'complete' => 'Caught up',
+            'time' => 'Stopped at its time limit; the next run goes on',
+            'waiting' => 'Waiting for the next block (two blocks of equal work at the tip)',
+            'error' => 'Ended with an error',
+            default => 'Unknown',
+        };
     }
 }

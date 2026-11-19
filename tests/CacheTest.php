@@ -245,6 +245,35 @@ final class CacheTest extends TestCase
         $this->assertSame('e', $cache->get('e')?->value);
     }
 
+    public function testSweepRemovesTheEntriesWrittenLongestAgoNotThoseThatExpireFirst(): void
+    {
+        $clock = null;
+        $cache = $this->cache($clock);
+        // 2000 one-day entries written over ten minutes (the ttl grows by one second per
+        // entry, so the earlier written also expire earlier).
+        for ($i = 0; $i < 2000; $i++) {
+            $cache->set('list:' . $i, $i, 86400 + $i);
+            $clock->advance(0.3);
+        }
+        // Then three short-lived entries written now: they expire long before any list entry.
+        $cache->set('tip', 1, 10);
+        $cache->set('status', 2, 15);
+        $cache->set('skip:own-a', 3, 30);
+
+        $removed = $cache->sweep(2000);
+        $this->assertSame(3, $removed);
+        $this->assertTrue($cache->get('tip') !== null, 'the tip entry stays');
+        $this->assertTrue($cache->get('status') !== null, 'the status entry stays');
+        $this->assertTrue($cache->get('skip:own-a') !== null, 'the skip marker stays');
+        foreach ([0, 1, 2] as $i) {
+            $this->assertNull($cache->getStale('list:' . $i), 'the oldest list entry ' . $i . ' went');
+        }
+        foreach ([3, 1000, 1999] as $i) {
+            $this->assertTrue($cache->get('list:' . $i) !== null, 'list entry ' . $i . ' stays');
+        }
+        $this->assertSame(0, $cache->sweep(2000), 'a second sweep finds nothing to do');
+    }
+
     public function testSweepKeepsStaleEntriesForTheGivenGrace(): void
     {
         $clock = null;

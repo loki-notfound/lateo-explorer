@@ -45,7 +45,7 @@ final class FrontControllerTest extends TestCase
         $settings = $dir . '/front-controller-settings.php';
         file_put_contents($settings, "<?php\nreturn " . var_export([
             'nodes' => [
-                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17777'],
+                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17767'],
                 ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://node.lateo.dev'],
             ],
             'database' => '/nonexistent/explorer.sqlite',

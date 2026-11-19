@@ -8,6 +8,7 @@ use Lateo\Explorer\Db\SnapshotStore;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\RpcException;
 use Lateo\Explorer\Rpc\RpcMethod;
+use Lateo\Explorer\Rpc\RpcResult;
 use Lateo\Explorer\Support\Clock;
 
 /**
@@ -20,7 +21,8 @@ use Lateo\Explorer\Support\Clock;
  * answers are stored only when both headers have the same hash, so that they belong to one
  * block; otherwise the run skips the snapshot and the next run tries again.
  *
- * Only own nodes answer, unless the caller allows the fallback (a bounded sample run).
+ * The node that gave the header run's tip is asked first (see run()). Only own nodes
+ * answer, unless the caller allows the fallback (a bounded sample run).
  */
 final class SupplySnapshot
 {
@@ -32,10 +34,16 @@ final class SupplySnapshot
     ) {
     }
 
-    public function run(): SnapshotOutcome
+    /**
+     * @param string|null $preferred the label of the node that gave the header run's tip: it is
+     *                               asked first, so that the snapshot is of the chain the run
+     *                               stored; when it fails (or is the fallback and the fallback
+     *                               is not allowed) the usual order applies
+     */
+    public function run(?string $preferred = null): SnapshotOutcome
     {
         try {
-            $first = $this->client->call(RpcMethod::GetLastBlockHeader, [], $this->allowFallback);
+            $first = $this->firstHeader($preferred);
             $node = $first->node;
             $before = HeaderParser::parse($first->data['block_header'] ?? null);
 
@@ -64,5 +72,18 @@ final class SupplySnapshot
         } catch (RpcException|IndexerException) {
             return SnapshotOutcome::Failed;
         }
+    }
+
+    /** @throws RpcException */
+    private function firstHeader(?string $preferred): RpcResult
+    {
+        if ($preferred !== null && ($this->allowFallback || $preferred !== $this->client->fallbackLabel())) {
+            try {
+                return $this->client->call(RpcMethod::GetLastBlockHeader, [], $this->allowFallback, $preferred);
+            } catch (RpcException) {
+                // Fall through to the usual order.
+            }
+        }
+        return $this->client->call(RpcMethod::GetLastBlockHeader, [], $this->allowFallback);
     }
 }

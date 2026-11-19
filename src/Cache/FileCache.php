@@ -131,8 +131,11 @@ final class FileCache
 
     /**
      * Remove expired entries (kept for $keepStaleSeconds after expiry), damaged files, old
-     * temporary files and unused lock files, then the entries that expire first until at most
-     * $maxFiles entries remain. Files of other names are left alone.
+     * temporary files and unused lock files, then the entries that were written longest ago
+     * (on a tie, the one that expires earlier) until at most $maxFiles entries remain. Age of
+     * writing decides, not expiry: a long-lived entry written long ago must not outlive the
+     * short-lived entries (tip, status, skip markers) that are written all the time. Files of
+     * other names are left alone.
      *
      * @return int the number of files removed
      */
@@ -144,7 +147,7 @@ final class FileCache
         }
         $now = $this->clock->now();
         $removed = 0;
-        /** @var array<string,int> $live name => expiry */
+        /** @var array<string,array{int,int}> $live name => [written at, expiry] */
         $live = [];
         foreach ($names as $name) {
             if (preg_match('/\A[0-9a-f]{64}\.(\d+)-[0-9a-f]+\.tmp\z/', $name, $m) === 1) {
@@ -160,11 +163,11 @@ final class FileCache
             if ($entry === null || $entry->expiresAt + $keepStaleSeconds <= $now) {
                 $removed += $this->remove($name);
             } else {
-                $live[$name] = $entry->expiresAt;
+                $live[$name] = [$entry->storedAt, $entry->expiresAt];
             }
         }
         if (count($live) > $maxFiles) {
-            asort($live);
+            uasort($live, static fn (array $x, array $y): int => $x <=> $y);
             foreach (array_slice(array_keys($live), 0, count($live) - $maxFiles) as $name) {
                 $removed += $this->remove((string) $name);
             }

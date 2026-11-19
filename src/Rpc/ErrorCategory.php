@@ -9,7 +9,7 @@ enum ErrorCategory: string
 {
     /** Refused by policy before any I/O: method not on the allow-list, fallback not allowed. */
     case RefusedMethod = 'refused-method';
-    /** The page's call budget or the shared fallback rate cap is used up. */
+    /** The page's call budget or one of the shared per-minute caps (fallback, web calls to own nodes) is used up. */
     case Budget = 'budget';
     /** The node could not be reached or the transfer broke off (DNS, TCP, TLS, reset, short body). */
     case Connect = 'connect';

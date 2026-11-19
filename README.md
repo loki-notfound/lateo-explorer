@@ -21,7 +21,8 @@ graphs are not built yet.
   allow-list of read-only calls; anything else is refused before any request is
   made. It never relays a transaction and never calls an administrative method.
 - Load on the nodes is bounded: a fixed number of calls per page, a shared cache,
-  a cap on calls to the fallback per minute, and small, paced runs of the indexer.
+  a cap per minute on web calls to the own nodes and another on calls to the
+  fallback, and small, paced runs of the indexer.
 - All prices come from the protocol's oracle (the pricing record of each block).
 - Everything that comes from the chain is untrusted input: asset names are mapped
   through a fixed list and anything else is shown as "unknown".
@@ -53,8 +54,13 @@ runs the site.
 
     php tests/run.php
 
-The tests read recorded RPC responses from `tests/fixtures/rpc/` and contact
-nothing. The runner prints one line per failure and a summary, and exits 0 or 1.
+The tests read recorded RPC responses from `tests/fixtures/rpc/` and contact no
+node. A few tests (`tests/RealFileTest.php`) use real files and start local
+processes only: a child PHP process that holds a lock, and PHP's built-in server
+on 127.0.0.1 for the curl transport. They skip, with a reason, where that is not
+possible. The runner prints one line per failure and per skipped test, and a
+summary (tests, passed, failed, skipped, assertions, time). It exits 0 when
+nothing failed and at least one test passed, and 1 otherwise.
 
 The layout:
 

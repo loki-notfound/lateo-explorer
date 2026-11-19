@@ -14,8 +14,8 @@ return [
     // only) or "fallback" (a public node, used when the own nodes fail). At least one own
     // node is required. A label is lowercase letters, digits and hyphens, at most 20 long.
     'nodes' => [
-        ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17777'],
-        ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://node-b.example.invalid:17777'],
+        ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://node-a.example.invalid:17767'],
+        ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://node-b.example.invalid:17767'],
         ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://node.lateo.dev'],
     ],
 
@@ -28,6 +28,7 @@ return [
     'limits' => [
         'page_max_calls' => 4,              // RPC attempts per page request, over all nodes
         'fallback_calls_per_minute' => 30,  // calls to the fallback, over all processes
+        'web_own_calls_per_minute' => 60,   // web calls to the own nodes, over all processes
         'header_batch' => 1000,             // headers per get_block_headers_range call
         'backfill_pause_seconds' => 2.0,    // pause between two backfill calls
         'run_seconds' => 45,                // working time of one indexer run

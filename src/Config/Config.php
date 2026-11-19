@@ -181,7 +181,7 @@ final readonly class Config
         }
         $known = [
             'page_max_calls', 'fallback_calls_per_minute', 'header_batch', 'backfill_pause_seconds',
-            'run_seconds', 'reorg_max_depth', 'unsettled_depth',
+            'run_seconds', 'reorg_max_depth', 'unsettled_depth', 'web_own_calls_per_minute',
         ];
         foreach (array_keys($raw) as $key) {
             if (!in_array($key, $known, true)) {
@@ -197,6 +197,7 @@ final readonly class Config
             self::intSetting($raw, 'run_seconds', $d->runSeconds, 1, 3600),
             self::intSetting($raw, 'reorg_max_depth', $d->reorgMaxDepth, 1, 10000),
             self::intSetting($raw, 'unsettled_depth', $d->unsettledDepth, 0, 10000),
+            self::intSetting($raw, 'web_own_calls_per_minute', $d->webOwnCallsPerMinute, 1, 600),
         );
         if ($limits->unsettledDepth > $limits->reorgMaxDepth) {
             throw new ConfigException('limits.unsettled_depth must not exceed reorg_max_depth');

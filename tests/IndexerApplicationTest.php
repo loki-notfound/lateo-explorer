@@ -83,7 +83,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         $all = $this->read($this->out) . $this->read($this->err);
         $this->assertStringContains('outcome=error', $all);
         $this->assertStringContains('snapshot=skipped', $all);
-        foreach (['example.invalid', 'lateo.dev', 'http', ':17777'] as $forbidden) {
+        foreach (['example.invalid', 'lateo.dev', 'http', ':17767'] as $forbidden) {
             $this->assertStringNotContains($forbidden, $all);
         }
         $this->assertSame('error', $this->db->value('SELECT outcome FROM runs'));
@@ -153,5 +153,40 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->app(25)->run();
         $this->assertSame(6, $this->count('blocks'));
         $this->assertSame(25, $this->store->lowestHeight());
+    }
+
+    public function testTwoBlocksOfEqualWorkEndWaitingWithExitZeroAndNoErrorOutput(): void
+    {
+        $a = FakeChain::synthetic(0, 20, 'a');
+        $this->serveWithSupplyOnOwn($a);
+        $this->assertSame(0, $this->app()->run());
+        $out = $this->read($this->out);
+        $before = $this->chainTables();
+        $runsBefore = $this->count('runs');
+
+        // Both own nodes are at the same height on another block of the same work.
+        $this->serveWithSupplyOnOwn(FakeChain::forked($a, 19, 'b', 20, 0));
+        $this->assertSame(0, $this->app()->run());
+        $this->assertSame('', $this->read($this->err), 'nothing goes to the error stream');
+        $all = $this->read($this->out);
+        $line = substr($all, strlen($out));
+        $this->assertStringContains('outcome=waiting', $line);
+        $this->assertStringContains('snapshot=stored', $line, 'the snapshot is taken as after a complete run');
+        $this->assertSame($before, $this->chainTables(), 'the chain tables are unchanged');
+        $this->assertSame($runsBefore + 1, $this->count('runs'));
+        $run = $this->db->one('SELECT * FROM runs ORDER BY id DESC LIMIT 1');
+        $this->assertSame('waiting', $run['outcome']);
+        $this->assertSame('node own-a: two blocks of equal work at height 20; waiting for the next block', $run['note']);
+    }
+
+    /** @return list<list<array<string,mixed>>> */
+    private function chainTables(): array
+    {
+        return [
+            $this->db->all('SELECT * FROM blocks ORDER BY height'),
+            $this->db->all('SELECT * FROM pricing_records ORDER BY height'),
+            $this->db->all('SELECT * FROM orphaned_blocks ORDER BY hash'),
+            $this->db->all('SELECT * FROM reorgs ORDER BY id'),
+        ];
     }
 }

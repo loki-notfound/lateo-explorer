@@ -6,7 +6,7 @@ namespace Lateo\Explorer\Tests;
 
 use Lateo\Explorer\Cache\FileCache;
 use Lateo\Explorer\Rpc\ErrorCategory;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\TransportFailure;
@@ -52,7 +52,8 @@ final class LiveDataTest extends WebTestBase
         $r = $this->get('/', null, 'GET', $this->app(['page_max_calls' => 1]));
         $this->assertSame(1, count($this->transport->calls), 'the budget of one stops the second node');
         $this->assertSame(200, $r->status);
-        $this->assertStringContains('Node not reachable', $r->body);
+        $this->assertStringContains('Temporarily unavailable', $r->body, 'a limit of ours is not an unreachable node');
+        $this->assertStringNotContains('Node not reachable', $r->body);
     }
 
     public function testEveryPageRequestGetsAFreshBudget(): void
@@ -113,7 +114,7 @@ final class LiveDataTest extends WebTestBase
             $this->config(),
             $this->transport,
             Profile::Indexer,
-            new FallbackLimiter($this->cacheDir, 30, $this->clock),
+            CallLimiter::fallback($this->cacheDir, 30, $this->clock),
             $this->clock,
         );
         $result = $client->call('get_last_block_header', [], false, 'own-a');
@@ -145,5 +146,47 @@ final class LiveDataTest extends WebTestBase
         $r = $this->get('/');
         $this->assertSame([self::A, self::B, self::F], $this->transport->hosts());
         $this->assertStringContains('910,670', $r->body);
+    }
+
+    public function testOverTheOwnNodeCapABlockPageSaysTemporarilyUnavailableAndAsksNothing(): void
+    {
+        $this->loadStandardIndex();
+        $app = $this->app(['web_own_calls_per_minute' => 1]);
+        $this->assertStringNotContains('Temporarily unavailable', $this->get('/', null, 'GET', $app)->body);
+        $this->assertSame(1, count($this->transport->calls), 'the home page used the one call of this minute');
+
+        $this->clock->advance(11);
+        $r = $this->get('/block/910657', null, 'GET', $app);
+        $this->assertSame(200, $r->status);
+        $this->assertStringContains('Temporarily unavailable', $r->body);
+        $this->assertStringNotContains('Node not reachable', $r->body);
+        $this->assertSame(1, count($this->transport->calls), 'the transport saw no further call, and the fallback was not tried');
+        $this->assertStringNotContains('example.invalid', $r->body);
+    }
+
+    public function testAnOwnNodeOverTheCapIsNotMarkedAsNotReachableOnTheStatusPage(): void
+    {
+        $this->loadStandardIndex();
+        $r = $this->get('/status', null, 'GET', $this->app(['web_own_calls_per_minute' => 1]));
+        $this->assertSame(200, $r->status);
+        $this->assertStringContains('Not asked just now', $r->body);
+        $this->assertStringContains('The limit on live calls was reached; asked again shortly', $r->body);
+        $this->assertStringNotContains('Node not reachable', $r->body);
+        $this->assertSame(1, substr_count($r->body, 'Not asked just now'), 'only the second own node was not asked');
+        $this->assertSame([self::A, self::F], $this->transport->hosts(), 'the capped node was not called');
+        $cache = new FileCache($this->cacheDir, $this->clock);
+        $this->assertNull($cache->get('skip:own-b'), 'a limit leaves no skip marker');
+        $this->assertNull($cache->get('skip:own-a'));
+    }
+
+    public function testTheFallbackCapAlsoWordsABlockPageAsTemporarilyUnavailable(): void
+    {
+        $this->loadStandardIndex();
+        $this->down(self::A, self::B);
+        $app = $this->app(['fallback_calls_per_minute' => 1]);
+        $this->get('/', null, 'GET', $app); // uses the one fallback call
+        $this->clock->advance(11);
+        $r = $this->get('/block/910657', null, 'GET', $app);
+        $this->assertStringContains('Temporarily unavailable', $r->body);
     }
 }

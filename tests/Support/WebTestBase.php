@@ -58,8 +58,8 @@ abstract class WebTestBase extends TestCase
     {
         return Config::fromArray([
             'nodes' => [
-                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17777'],
-                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17777'],
+                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17767'],
+                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17767'],
                 ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://' . self::F],
             ],
             'database' => '/srv/explorer-data/explorer.sqlite',

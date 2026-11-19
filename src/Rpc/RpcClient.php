@@ -16,7 +16,10 @@ use Lateo\Explorer\Support\SystemClock;
  * - Nodes are tried in this order: own nodes in settings order, then the fallback. Every
  *   result says which node answered.
  * - Web profile: one try per node, a budget of page_max_calls attempts per client (so one
- *   client is one page request), and the fallback also under the shared per-minute cap.
+ *   client is one page request), every attempt to an own node under the shared per-minute cap
+ *   web_own_calls_per_minute, and the fallback under its own shared per-minute cap. Over a
+ *   cap the call fails with category Budget and no other node is tried.
+ * - The own-node cap is never used by the indexer profile.
  * - Indexer profile: up to two more tries on the same node after a connect, timeout or decode
  *   error, no attempt budget, and the fallback only when the caller passes $allowFallback.
  * - Every attempt that reaches the fallback is counted by the limiter, whatever the profile.
@@ -27,7 +30,8 @@ final class RpcClient
     public const REQUEST_ID = '0';
 
     private readonly RequestLimits $requestLimits;
-    private readonly FallbackLimiter $limiter;
+    private readonly CallLimiter $limiter;
+    private readonly CallLimiter $ownLimiter;
     private ?int $remaining;
     private int $attempts = 0;
 
@@ -35,17 +39,23 @@ final class RpcClient
         private readonly Config $config,
         private readonly Transport $transport,
         private readonly Profile $profile,
-        ?FallbackLimiter $limiter = null,
+        ?CallLimiter $limiter = null,
         private readonly Clock $clock = new SystemClock(),
+        ?CallLimiter $ownLimiter = null,
     ) {
         $this->requestLimits = new RequestLimits(
             $profile->connectTimeout(),
             $profile->totalTimeout(),
             $profile->maxResponseBytes(),
         );
-        $this->limiter = $limiter ?? new FallbackLimiter(
+        $this->limiter = $limiter ?? CallLimiter::fallback(
             $config->cacheDir,
             $config->limits->fallbackCallsPerMinute,
+            $clock,
+        );
+        $this->ownLimiter = $ownLimiter ?? CallLimiter::ownNodes(
+            $config->cacheDir,
+            $config->limits->webOwnCallsPerMinute,
             $clock,
         );
         $this->remaining = $profile->hasCallBudget() ? $config->limits->pageMaxCalls : null;
@@ -155,6 +165,8 @@ final class RpcClient
         }
         if ($spec->isFallback()) {
             $this->limiter->acquire($spec->label);
+        } elseif ($this->profile === Profile::Web) {
+            $this->ownLimiter->acquire($spec->label);
         }
         if ($this->remaining !== null) {
             $this->remaining--;

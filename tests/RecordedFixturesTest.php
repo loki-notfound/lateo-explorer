@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lateo\Explorer\Tests;
 
 use Lateo\Explorer\Config\Config;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RequestLimits;
 use Lateo\Explorer\Rpc\RpcClient;
@@ -30,7 +30,7 @@ final class RecordedFixturesTest extends TestCase
             $config,
             $this->transport,
             Profile::Indexer,
-            new FallbackLimiter($this->scratch(), 30, new FakeClock()),
+            CallLimiter::fallback($this->scratch(), 30, new FakeClock()),
             new FakeClock(),
         );
     }

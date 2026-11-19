@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Lateo\Explorer\Web;
 
 use Lateo\Explorer\Config\Config;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\Transport;
@@ -22,14 +22,21 @@ final class LiveClientFactory
         private readonly Config $config,
         private readonly Transport $transport,
         private readonly Clock $clock,
-        /** Where the shared cap on calls to the fallback keeps its count. */
+        /** Where the shared caps on calls to the fallback and to the own nodes keep their counts. */
         private readonly string $cacheDir,
     ) {
     }
 
     public function make(): RpcClient
     {
-        $limiter = new FallbackLimiter($this->cacheDir, $this->config->limits->fallbackCallsPerMinute, $this->clock);
-        return new RpcClient($this->config, $this->transport, Profile::Web, $limiter, $this->clock);
+        $limits = $this->config->limits;
+        return new RpcClient(
+            $this->config,
+            $this->transport,
+            Profile::Web,
+            CallLimiter::fallback($this->cacheDir, $limits->fallbackCallsPerMinute, $this->clock),
+            $this->clock,
+            CallLimiter::ownNodes($this->cacheDir, $limits->webOwnCallsPerMinute, $this->clock),
+        );
     }
 }

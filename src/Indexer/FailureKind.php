@@ -13,6 +13,8 @@ enum FailureKind: string
     case ReorgTooDeep = 'reorg-too-deep';
     /** A node disagrees with the stored chain but its chain has no more work than ours. */
     case LessWork = 'less-work';
+    /** A batch of a node other than the run's tip node does not link to the stored chain. */
+    case NotTipNode = 'not-tip-node';
     /** The nodes could not give what the run needs. */
     case Node = 'node';
     /** The run's rules do not allow going on (for example a backfill without an own node). */

@@ -22,7 +22,8 @@ use Lateo\Explorer\Indexer\HeaderParser;
  *
  * - Every live value is read through FileCache::remember(), so concurrent requests share it
  *   and a failing node never makes a page fail: the result says Unreachable, Busy or Mismatch
- *   and the page words it.
+ *   and the page words it. A limit on live calls (the page budget, the fallback cap or the
+ *   own-node cap, RpcException category Budget) is Busy, "Temporarily unavailable".
  * - A node that fails to connect or times out gets a marker in the cache for SKIP_SECONDS;
  *   page requests do not ask it again meanwhile. The indexer never reads these markers.
  * - Nodes are asked by label, own nodes first (settings order), then the fallback. The labels
@@ -104,9 +105,11 @@ final class LiveData
 
     /**
      * The top block of every node, one call each, by label (cached 15 s as one entry). A node
-     * that fails, or is skipped after a recent failure, is listed as not reachable.
+     * that fails, or is skipped after a recent failure, is listed as not reachable. A node that
+     * was not asked because a limit on live calls was reached (the page budget or a shared cap)
+     * is flagged "limited" instead: it is not marked as failed and gets no skip marker.
      *
-     * @return LiveResult value: list<array{name:string,reachable:bool,height:?int,hash:?string,skipped:bool}>
+     * @return LiveResult value: list<array{name:string,reachable:bool,height:?int,hash:?string,skipped:bool,limited:bool}>
      */
     public function nodes(): LiveResult
     {
@@ -116,7 +119,14 @@ final class LiveData
             $own = 0;
             foreach ($this->labels() as $label => $isFallback) {
                 $name = $isFallback ? self::FALLBACK_NAME : 'Own node ' . (++$own);
-                $row = ['name' => $name, 'reachable' => false, 'height' => null, 'hash' => null, 'skipped' => false];
+                $row = [
+                    'name' => $name,
+                    'reachable' => false,
+                    'height' => null,
+                    'hash' => null,
+                    'skipped' => false,
+                    'limited' => false,
+                ];
                 if ($this->skipped($label)) {
                     $row['skipped'] = true;
                     $rows[] = $row;
@@ -128,7 +138,13 @@ final class LiveData
                     $row['height'] = $header->height;
                     $row['hash'] = $header->hash;
                 } catch (RpcException $e) {
-                    $this->noteFailure($label, $e);
+                    if ($e->category === ErrorCategory::Budget) {
+                        // A limit of ours, not a failure of the node: no skip marker, and the
+                        // node is not called unreachable.
+                        $row['limited'] = true;
+                    } else {
+                        $this->noteFailure($label, $e);
+                    }
                 } catch (IndexerException) {
                     // An answer that does not parse counts as not reachable.
                 }
@@ -216,7 +232,11 @@ final class LiveData
             $r = $this->cache->remember($key, $ttl, $producer);
         } catch (LiveMismatch) {
             return new LiveResult(LiveState::Mismatch);
-        } catch (RpcException | IndexerException | \RuntimeException) {
+        } catch (RpcException $e) {
+            // A limit of ours (page budget, fallback cap, own-node cap) is "temporarily
+            // unavailable", not an unreachable node.
+            return new LiveResult($e->category === ErrorCategory::Budget ? LiveState::Busy : LiveState::Unreachable);
+        } catch (IndexerException | \RuntimeException) {
             return new LiveResult(LiveState::Unreachable);
         }
         return match ($r->status) {

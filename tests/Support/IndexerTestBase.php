@@ -10,7 +10,7 @@ use Lateo\Explorer\Db\Database;
 use Lateo\Explorer\Db\Schema;
 use Lateo\Explorer\Indexer\HeaderIndexer;
 use Lateo\Explorer\Rpc\ErrorCategory;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\TransportFailure;
@@ -45,8 +45,8 @@ abstract class IndexerTestBase extends TestCase
         }
         return Config::fromArray([
             'nodes' => [
-                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17777'],
-                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17777'],
+                ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17767'],
+                ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17767'],
                 ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://' . self::F],
             ],
             'database' => '/srv/explorer-data/explorer.sqlite',
@@ -62,7 +62,7 @@ abstract class IndexerTestBase extends TestCase
             $config,
             $this->transport,
             Profile::Indexer,
-            new FallbackLimiter($this->scratch() . '/limiter', $config->limits->fallbackCallsPerMinute, $this->clock),
+            CallLimiter::fallback($this->scratch() . '/limiter', $config->limits->fallbackCallsPerMinute, $this->clock),
             $this->clock,
         );
     }

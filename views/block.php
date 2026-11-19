@@ -13,6 +13,12 @@ $b = $v['block'];
 $p = $v['pricing'];
 $now = $v['now'];
 $height = (int) $b['height'];
+$version = (int) $b['major_version'];
+// What the record of a block of this version can hold: the daemon fixes some members to zero
+// or leaves them unset in the early versions, so there the page shows no number.
+$hasReserveRatio = $version >= 4;
+$hasReserveRatioMa = $version >= 5;
+$hasYieldPrice = $version >= 6;
 ?>
 <section class="lt-stack">
   <h1>Block <span class="lt-num"><?= lt_esc(Format::int($height)) ?></span></h1>
@@ -88,9 +94,9 @@ $height = (int) $b['height'];
 <?php if ($p === null && $height < $v['firstPricingHeight']): ?>
   <p>Pricing records start at block 89,300 (2023-10-01). This block is before that and has none.</p>
 <?php elseif ($p === null): ?>
-  <p>No pricing record is stored for this block.</p>
+  <p>This block carries an empty pricing record.</p>
 <?php else: ?>
-  <p>The oracle's record that this block carries. Conversions between ZPH and ZSD or ZRS use the less favourable of the spot and the moving-average rate; conversions between ZSD and ZYS use the yield price.</p>
+  <p>The oracle's record that this block carries, and the rates the protocol derives from it.</p>
   <dl class="lt-kv">
     <div><dt>Record time</dt><dd><?= Html::time((int) $p['timestamp'], $now) ?></dd></div>
     <div><dt>Oracle price, spot</dt><dd><?= Html::figure(Format::price($p['spot']) . ' USD per ZPH') ?></dd></div>
@@ -99,9 +105,9 @@ $height = (int) $b['height'];
     <div><dt>Stable Dollar, moving average</dt><dd><?= Html::figure(Format::decimal($p['stable_ma']) . ' ZPH per ZSD') ?></dd></div>
     <div><dt>Reserve Share, spot</dt><dd><?= Html::figure(Format::decimal($p['reserve']) . ' ZPH per ZRS') ?></dd></div>
     <div><dt>Reserve Share, moving average</dt><dd><?= Html::figure(Format::decimal($p['reserve_ma']) . ' ZPH per ZRS') ?></dd></div>
-    <div><dt>Yield Share</dt><dd><?= Html::figure(Format::decimal($p['yield_price']) . ' ZSD per ZYS') ?></dd></div>
-    <div><dt>Reserve ratio, spot</dt><dd><?= Html::figure(Format::ratio($p['reserve_ratio'])) ?></dd></div>
-    <div><dt>Reserve ratio, moving average</dt><dd><?= Html::figure(Format::ratio($p['reserve_ratio_ma'])) ?><?= lt_esc((int) $p['reserve_ratio_ma'] === 0 ? ' (not defined yet: the average needs 720 records)' : '') ?></dd></div>
+    <div><dt>Yield Share</dt><dd><?php if ($hasYieldPrice): ?><?= Html::figure(Format::decimal($p['yield_price']) . ' ZSD per ZYS') ?><?php else: ?><span class="lt-muted">Not part of the record at this height</span><?php endif; ?></dd></div>
+    <div><dt>Reserve ratio, spot</dt><dd><?php if ($hasReserveRatio): ?><?= Html::figure(Format::ratio($p['reserve_ratio'])) ?><?php else: ?><span class="lt-muted">Not part of the record at this height</span><?php endif; ?></dd></div>
+    <div><dt>Reserve ratio, moving average</dt><dd><?php if ($hasReserveRatioMa): ?><?= Html::figure(Format::ratio($p['reserve_ratio_ma'])) ?><?= lt_esc((int) $p['reserve_ratio_ma'] === 0 ? ' (not defined yet: the average needs 720 records)' : '') ?><?php else: ?><span class="lt-muted">Not part of the record at this height</span><?php endif; ?></dd></div>
     <div><dt>Oracle signature</dt><dd><?= Html::hash((string) $p['signature']) ?></dd></div>
   </dl>
 <?php endif; ?>

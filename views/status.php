@@ -36,7 +36,11 @@ $now = $v['now'];
 <?php foreach ($v['nodes'] as $n): ?>
         <tr>
           <th scope="row"><?= lt_esc($n['name']) ?></th>
-<?php if ($n['reachable']): ?>
+<?php if ($n['limited']): ?>
+          <td><?= Html::badge('unknown', 'Not asked just now') ?></td>
+          <td class="lt-num">-</td>
+          <td>The limit on live calls was reached; asked again shortly</td>
+<?php elseif ($n['reachable']): ?>
           <td><?= Html::badge('online', 'Reachable') ?></td>
           <td class="lt-num"><?= lt_esc(Format::int((int) $n['height'])) ?></td>
           <td><?= Html::badge($n['match']['state'], $n['match']['label']) ?></td>
@@ -68,7 +72,7 @@ $now = $v['now'];
     <div><dt>Last indexer run</dt><dd><?= Html::time((int) $v['run']['finished_at'], $now) ?></dd></div>
     <div><dt>Mode of that run</dt><dd><?= lt_esc($v['run']['mode']) ?></dd></div>
     <div><dt>Headers stored by it</dt><dd><?= Html::num((int) $v['run']['headers']) ?></dd></div>
-    <div><dt>Outcome of that run</dt><dd><?= lt_esc($v['run']['outcome']) ?></dd></div>
+    <div><dt>Outcome of that run</dt><dd><?= lt_esc($v['outcomeWords']) ?></dd></div>
 <?php endif; ?>
 <?php if ($v['reorg'] === null): ?>
     <div><dt>Last reorganisation</dt><dd>None recorded</dd></div>

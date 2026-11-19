@@ -9,6 +9,7 @@ use Lateo\Explorer\Db\ChainStore;
 use Lateo\Explorer\Db\RunStore;
 use Lateo\Explorer\Db\SnapshotStore;
 use Lateo\Explorer\Indexer\HeaderParser;
+use Lateo\Explorer\Tests\Support\FakeChain;
 use Lateo\Explorer\Tests\Support\RecordedCall;
 use Lateo\Explorer\Tests\Support\WebTestBase;
 use Lateo\Explorer\Rpc\TransportResponse;
@@ -282,10 +283,77 @@ final class WebPagesTest extends WebTestBase
         $this->assertSame(200, $r->status);
         $this->assertStringContains('3.057468230000 USD per ZPH', $r->body);
         $this->assertStringContains('2023-10-01 09:27:07 UTC', $r->body);
-        $this->assertStringContains('0.00%</span> (not defined yet: the average needs 720 records)', $r->body);
+        $this->assertSame(3, substr_count($r->body, 'Not part of the record at this height'), 'version 3: both ratios and the yield price');
+        $this->assertStringNotContains('not defined yet', $r->body, 'the zero average is only explained from version 5 on');
+        $this->assertStringContains('The oracle\'s record that this block carries, and the rates the protocol derives from it.', $r->body);
+        $this->assertStringNotContains('less favourable', $r->body, 'the conversion rule belongs on the method page, later');
         $this->assertStringContains('Previous block 89,299', $r->body);
         $this->assertStringContains('Next block 89,301', $r->body);
         $this->assertStringNotContains('Pricing records start at block 89,300', $r->body);
+    }
+
+    /**
+     * Store one synthetic block of the given major version with a pricing record that has
+     * real values everywhere except what the daemon fixes at zero in that version.
+     *
+     * @param array<string,int> $record members of the pricing record to set
+     */
+    private function storeVersioned(int $height, int $version, array $record = [], bool $empty = false): void
+    {
+        $h = FakeChain::header($height, hash('sha256', 'v:' . $height), hash('sha256', 'v:' . ($height - 1)));
+        $h['major_version'] = $version;
+        $h['num_txes'] = 0;
+        if ($empty) {
+            foreach ($h['pricing_record'] as $k => $v) {
+                $h['pricing_record'][$k] = $k === 'signature' ? str_repeat('0', 128) : 0;
+            }
+        } else {
+            $h['pricing_record'] = $record + $h['pricing_record'];
+        }
+        (new ChainStore($this->db))->insertBatch([HeaderParser::parse($h)]);
+    }
+
+    public function testTheBlockPageShowsOnlyWhatTheRecordOfThatVersionHolds(): void
+    {
+        $this->loadStandardIndex();
+        $note = 'Not part of the record at this height';
+        $zeroMa = ['reserve_ratio_ma' => 0];
+
+        // Version 4: the spot ratio is real, the average is not part of the record.
+        $this->storeVersioned(294100, 4, ['reserve_ratio_ma' => 0, 'yield_price' => 0]);
+        $b = $this->get('/block/294100')->body;
+        $this->assertSame(2, substr_count($b, $note), 'average ratio and yield price');
+        $this->assertStringContains('40.00%', $b, 'reserve_ratio of 4 * 10^11 is shown');
+        $this->assertStringNotContains('not defined yet', $b);
+
+        // Version 5: the average is part of the record; a zero there is explained.
+        $this->storeVersioned(295100, 5, $zeroMa + ['yield_price' => 0]);
+        $b = $this->get('/block/295100')->body;
+        $this->assertSame(1, substr_count($b, $note), 'only the yield price');
+        $this->assertStringContains('0.00%</span> (not defined yet: the average needs 720 records)', $b);
+
+        // Version 5 with a real average: no explanation.
+        $this->storeVersioned(295200, 5, ['yield_price' => 0]);
+        $b = $this->get('/block/295200')->body;
+        $this->assertSame(1, substr_count($b, $note));
+        $this->assertStringContains('50.00%', $b);
+        $this->assertStringNotContains('not defined yet', $b);
+
+        // Version 6: everything is part of the record, with a real yield price.
+        $this->storeVersioned(360100, 6, ['yield_price' => 1_995_604_220_000]);
+        $b = $this->get('/block/360100')->body;
+        $this->assertSame(0, substr_count($b, $note));
+        $this->assertStringContains('1.995604220000 ZSD per ZYS', $b);
+    }
+
+    public function testABlockAfterTheFirstRecordWithAnEmptyRecordSaysSo(): void
+    {
+        $this->loadStandardIndex();
+        $this->storeVersioned(150000, 3, [], true);
+        $b = $this->get('/block/150000')->body;
+        $this->assertStringContains('This block carries an empty pricing record.', $b);
+        $this->assertStringNotContains('Oracle price, spot', $b);
+        $this->assertStringNotContains('No pricing record is stored', $b);
     }
 
     public function testTheFirstBlockOfHardFork11(): void
@@ -370,7 +438,7 @@ final class WebPagesTest extends WebTestBase
         $this->assertSame(3, substr_count($b, 'Reachable'));
         $this->assertSame(3, substr_count($b, '910,670'));
         $this->assertSame(3, substr_count($b, 'Not indexed yet'), 'the node tip is above the index');
-        foreach (['example.invalid', 'node-a', 'node-b', 'own-a', 'own-b', '17777', 'http://'] as $secret) {
+        foreach (['example.invalid', 'node-a', 'node-b', 'own-a', 'own-b', '17767', 'http://'] as $secret) {
             $this->assertStringNotContains($secret, $b);
         }
         $this->assertSame(3, count($this->transport->calls));
@@ -426,6 +494,31 @@ final class WebPagesTest extends WebTestBase
         $this->assertSame(6, count($this->transport->calls));
     }
 
+    public function testTheStatusPageWordsTheLastOutcomeFromAFixedList(): void
+    {
+        $this->loadStandardIndex();
+        $runs = new RunStore($this->db);
+        $cases = [
+            'complete' => 'Caught up',
+            'time' => 'Stopped at its time limit; the next run goes on',
+            'waiting' => 'Waiting for the next block (two blocks of equal work at the tip)',
+            'error' => 'Ended with an error',
+            'something-new' => 'Unknown',
+            '<b>x</b> node-a.example.invalid' => 'Unknown',
+        ];
+        $t = 1795048700;
+        foreach ($cases as $stored => $words) {
+            $this->db->exec('DELETE FROM runs');
+            $runs->record($t, $t + 5, 'tip', null, null, 0, 'own-a', $stored, 'node own-a: note text that is never shown');
+            $this->clock->advance(20); // the page is cached for a few seconds only
+            $b = $this->get('/status')->body;
+            $this->assertStringContains('<dt>Outcome of that run</dt><dd>' . $words . '</dd>', $b, $stored);
+            $this->assertStringNotContains('never shown', $b, 'the stored note is not printed');
+            $this->assertStringNotContains('example.invalid', $b);
+            $this->assertStringNotContains('<b>x</b>', $b);
+        }
+    }
+
     public function testStatusShowsTheIndexerAndTheLastRecords(): void
     {
         $this->loadStandardIndex();
@@ -438,7 +531,7 @@ final class WebPagesTest extends WebTestBase
         $b = $this->get('/status')->body;
         $this->assertStringContains(Format::time(1795048745), $b, 'the last run');
         $this->assertStringContains('<dt>Mode of that run</dt><dd>tip</dd>', $b);
-        $this->assertStringContains('<dt>Outcome of that run</dt><dd>complete</dd>', $b);
+        $this->assertStringContains('<dt>Outcome of that run</dt><dd>Caught up</dd>', $b);
         $this->assertStringContains(Format::time(1795040000) . '</time>', $b);
         $this->assertStringContains('2 blocks deep, above height <a class="lt-num" href="/block/910600">910,600</a>', $b);
         $this->assertStringContains(Format::time(1795048746), $b, 'the supply snapshot');
@@ -580,7 +673,7 @@ final class WebPagesTest extends WebTestBase
         $this->assertStringContains('href="https://github.com/loki-notfound/lateo-explorer"', $b);
         $this->assertStringContains('BSD-3-Clause', $b);
         $this->assertStringContains('/assets/lockup-host-explorer-reversed.svg', $b);
-        foreach (['example.invalid', 'node-a', '17777'] as $secret) {
+        foreach (['example.invalid', 'node-a', '17767'] as $secret) {
             $this->assertStringNotContains($secret, $b);
         }
         $this->assertSame([], $this->transport->calls);
@@ -651,7 +744,7 @@ final class WebPagesTest extends WebTestBase
     public function testAFailureOfTheCodeIsAPlain500WithoutDetail(): void
     {
         $opener = static function (): never {
-            throw new \LogicException('secret detail at /var/www/x');
+            throw new \LogicException('secret detail at /srv/private-detail/x');
         };
         $app = $this->app([], $opener);
         $reported = [];
@@ -662,7 +755,7 @@ final class WebPagesTest extends WebTestBase
         $this->assertSame(500, $r->status);
         $this->assertStringContains('Something broke on the server', $r->body);
         $this->assertStringNotContains('secret detail', $r->body);
-        $this->assertStringNotContains('/var/www', $r->body);
+        $this->assertStringNotContains('/srv/private-detail', $r->body);
         $this->assertSame('no-store', $r->header('Cache-Control'));
     }
 

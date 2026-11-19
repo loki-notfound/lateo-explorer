@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Lateo\Explorer\Tests;
 
+use Lateo\Explorer\Indexer\FailureKind;
 use Lateo\Explorer\Indexer\HeaderIndexer;
 use Lateo\Explorer\Indexer\RunMode;
 use Lateo\Explorer\Indexer\RunSummary;
 use Lateo\Explorer\Rpc\ErrorCategory;
 use Lateo\Explorer\Rpc\TransportFailure;
+use Lateo\Explorer\Rpc\TransportResponse;
 use Lateo\Explorer\Tests\Support\FakeChain;
 use Lateo\Explorer\Tests\Support\IndexerTestBase;
+use Lateo\Explorer\Tests\Support\RecordedCall;
 
 final class HeaderIndexerTest extends IndexerTestBase
 {
@@ -460,7 +463,96 @@ final class HeaderIndexerTest extends IndexerTestBase
 
         $this->serve(FakeChain::forked($a, 19, 'b', 20, 0));
         $s = $this->indexer($this->config(), 1)->run();
+        $this->assertWaiting($s, 'own-a', 20, $before);
+    }
+
+    public function testEqualWorkOnABatchThatDoesNotLinkAlsoWaits(): void
+    {
+        $a = FakeChain::synthetic(1, 20, 'a');
+        $this->serve($a);
+        $this->indexer($this->config(), 1)->run();
+        $before = $this->snapshotOfChain();
+
+        // The tip node is ahead by blocks but its tip has exactly the stored work.
+        $this->serve(FakeChain::forked($a, 17, 'b', 22, 0)->addWork(21, -2000));
+        $s = $this->indexer($this->config(), 1)->run();
+        $this->assertWaiting($s, 'own-a', 20, $before);
+    }
+
+    public function testLessWorkIsStillAnErrorNextToTheWaitingOutcome(): void
+    {
+        $a = FakeChain::synthetic(1, 20, 'a');
+        $this->serve($a);
+        $this->indexer($this->config(), 1)->run();
+        $before = $this->snapshotOfChain();
+        $this->serve(FakeChain::forked($a, 19, 'b', 20, -1));
+        $s = $this->indexer($this->config(), 1)->run();
         $this->assertLessWork($s, 'own-a', $before);
+        $this->assertSame(FailureKind::LessWork->value, explode(':', $s->note)[0]);
+    }
+
+    /** @param array<int,array<string,mixed>> $before */
+    private function assertWaiting(RunSummary $s, string $label, int $height, array $before): void
+    {
+        $this->assertSame(RunSummary::WAITING, $s->outcome);
+        $this->assertSame('node ' . $label . ': two blocks of equal work at height ' . $height . '; waiting for the next block', $s->note);
+        $this->assertStringNotContains('example.invalid', $s->note);
+        $this->assertSame(0, $s->reorgs);
+        $this->assertSame($before, $this->snapshotOfChain(), 'the database is unchanged');
+    }
+
+    // --- only the node that gave the tip decides a rollback --------------------------------------
+
+    /** Node A gives the tip (the stored chain on to 40) but fails on every range. */
+    private function tipNodeThatFailsOnRanges(FakeChain $tipChain): void
+    {
+        $this->transport->serve(self::A, static function (RecordedCall $c) use ($tipChain): TransportResponse {
+            if ($c->method === 'get_last_block_header') {
+                return $tipChain->respond($c);
+            }
+            throw new TransportFailure(ErrorCategory::Connect);
+        });
+    }
+
+    public function testAnotherNodeOnALighterBranchDoesNotRollBackWhenTheTipNodeFailsOnTheRange(): void
+    {
+        $a = FakeChain::synthetic(1, 20, 'a');
+        $this->serve($a);
+        $this->indexer($this->config(), 1)->run();
+        $before = $this->snapshotOfChain();
+
+        // A is the tip node (work at 40: 40005) and fails on ranges. B is higher than the
+        // stored chain, has more work than it (35005 against 20005) but less than the tip.
+        $this->tipNodeThatFailsOnRanges(FakeChain::synthetic(1, 40, 'a'));
+        $this->serve(FakeChain::forked($a, 17, 'b', 40, -5000), [self::B]);
+        $s = $this->indexer($this->config(), 1)->run();
+
+        $this->assertSame(RunSummary::ERROR, $s->outcome);
+        $this->assertStringContains('not-tip-node', $s->note);
+        $this->assertStringContains('node own-b', $s->note);
+        $this->assertStringContains('nothing was changed', $s->note);
+        $this->assertStringNotContains('example.invalid', $s->note);
+        $this->assertSame(0, $s->reorgs);
+        $this->assertSame($before, $this->snapshotOfChain(), 'nothing was rolled back or stored');
+        $this->assertSame(20, $this->count('blocks'));
+    }
+
+    public function testAnotherNodeOnTheSameChainIsStoredWhenTheTipNodeFailsOnTheRange(): void
+    {
+        $a = FakeChain::synthetic(1, 20, 'a');
+        $this->serve($a);
+        $this->indexer($this->config(), 1)->run();
+
+        $full = FakeChain::synthetic(1, 40, 'a');
+        $this->tipNodeThatFailsOnRanges($full);
+        $this->serve(FakeChain::synthetic(1, 40, 'a')->addWork(1, -1), [self::B]);
+        $s = $this->indexer($this->config(), 1)->run();
+
+        $this->assertSame(RunSummary::COMPLETE, $s->outcome, $s->note);
+        $this->assertSame(40, $this->count('blocks'));
+        $this->assertSame('own-b', $s->node);
+        $this->assertSame(0, $s->reorgs);
+        $this->assertSame($full->hashAt(40), $this->store->hashAt(40));
     }
 
     public function testANodeWithMoreWorkRollsBackToTheForkPoint(): void

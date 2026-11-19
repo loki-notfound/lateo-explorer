@@ -6,7 +6,7 @@ namespace Lateo\Explorer\Tests;
 
 use Lateo\Explorer\Config\Config;
 use Lateo\Explorer\Rpc\ErrorCategory;
-use Lateo\Explorer\Rpc\FallbackLimiter;
+use Lateo\Explorer\Rpc\CallLimiter;
 use Lateo\Explorer\Rpc\Profile;
 use Lateo\Explorer\Rpc\RpcClient;
 use Lateo\Explorer\Rpc\RpcException;
@@ -37,8 +37,8 @@ final class RpcClientTest extends TestCase
     private function config(array $limits = [], array $labels = ['own-a', 'own-b', 'fallback']): Config
     {
         $all = [
-            'own-a' => ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17777'],
-            'own-b' => ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17777'],
+            'own-a' => ['label' => 'own-a', 'kind' => 'own', 'url' => 'http://' . self::A . ':17767'],
+            'own-b' => ['label' => 'own-b', 'kind' => 'own', 'url' => 'http://' . self::B . ':17767'],
             'fallback' => ['label' => 'fallback', 'kind' => 'fallback', 'url' => 'https://' . self::F],
         ];
         return Config::fromArray([
@@ -54,11 +54,14 @@ final class RpcClientTest extends TestCase
         FixtureTransport $transport,
         Profile $profile = Profile::Web,
         ?Config $config = null,
-        ?FallbackLimiter $limiter = null,
+        ?CallLimiter $limiter = null,
+        ?CallLimiter $ownLimiter = null,
     ): RpcClient {
         $config ??= $this->config();
-        $limiter ??= new FallbackLimiter($this->scratch() . '/limiter', $config->limits->fallbackCallsPerMinute, $this->clock);
-        return new RpcClient($config, $transport, $profile, $limiter, $this->clock);
+        $dir = $this->scratch() . '/limiter';
+        $limiter ??= CallLimiter::fallback($dir, $config->limits->fallbackCallsPerMinute, $this->clock);
+        $ownLimiter ??= CallLimiter::ownNodes($dir, $config->limits->webOwnCallsPerMinute, $this->clock);
+        return new RpcClient($config, $transport, $profile, $limiter, $this->clock, $ownLimiter);
     }
 
     private function assertRpc(ErrorCategory $category, callable $fn, ?string $node = null): RpcException
@@ -196,7 +199,7 @@ final class RpcClientTest extends TestCase
             'untrusted as text' => [FixtureTransport::rpcOk('"untrusted":"false"'), ErrorCategory::Untrusted],
             'untrusted as number' => [FixtureTransport::rpcOk('"untrusted":1'), ErrorCategory::Untrusted],
         ];
-        $private = ['http://', 'https://', '.invalid', 'lateo.dev', ':17777', 'curl', 'cURL', 'resolve', 'SSL', 'Method not found', 'BUSY', 'oops'];
+        $private = ['http://', 'https://', '.invalid', 'lateo.dev', ':17767', 'curl', 'cURL', 'resolve', 'SSL', 'Method not found', 'BUSY', 'oops'];
         foreach ($cases as $name => [$answer, $category]) {
             $t = new FixtureTransport();
             $t->script(self::A, [$answer]);
@@ -417,8 +420,8 @@ final class RpcClientTest extends TestCase
         $config = $this->config(['page_max_calls' => 20, 'fallback_calls_per_minute' => 3]);
         $t1 = new FixtureTransport();
         $t2 = new FixtureTransport();
-        $c1 = $this->client($t1, Profile::Web, $config, new FallbackLimiter($dir, 3, $this->clock));
-        $c2 = $this->client($t2, Profile::Web, $config, new FallbackLimiter($dir, 3, $this->clock));
+        $c1 = $this->client($t1, Profile::Web, $config, CallLimiter::fallback($dir, 3, $this->clock));
+        $c2 = $this->client($t2, Profile::Web, $config, CallLimiter::fallback($dir, 3, $this->clock));
 
         $this->assertSame('fallback', $c1->call('get_info', [], null, 'fallback')->node);
         $this->assertSame('fallback', $c2->call('get_info', [], null, 'fallback')->node);
@@ -442,7 +445,7 @@ final class RpcClientTest extends TestCase
         $dir = $this->scratch() . '/shared';
         $config = $this->config(['page_max_calls' => 20, 'fallback_calls_per_minute' => 1]);
         $t = new FixtureTransport();
-        $c = $this->client($t, Profile::Web, $config, new FallbackLimiter($dir, 1, $this->clock));
+        $c = $this->client($t, Profile::Web, $config, CallLimiter::fallback($dir, 1, $this->clock));
         $t->script(self::A, [self::failure(ErrorCategory::Connect), self::failure(ErrorCategory::Connect)]);
         $t->script(self::B, [self::failure(ErrorCategory::Connect), self::failure(ErrorCategory::Connect)]);
         $this->assertSame('fallback', $c->call('get_info')->node);
@@ -450,10 +453,65 @@ final class RpcClientTest extends TestCase
         $this->assertSame([self::A, self::B, self::F, self::A, self::B], $t->hosts());
     }
 
+    public function testTheOwnNodeCapPerMinuteIsSharedBetweenClientsAndStopsTheFailoverChain(): void
+    {
+        $dir = $this->scratch() . '/shared';
+        $config = $this->config(['page_max_calls' => 20, 'web_own_calls_per_minute' => 3]);
+        $t1 = new FixtureTransport();
+        $t2 = new FixtureTransport();
+        $c1 = $this->client($t1, Profile::Web, $config, null, CallLimiter::ownNodes($dir, 3, $this->clock));
+        $c2 = $this->client($t2, Profile::Web, $config, null, CallLimiter::ownNodes($dir, 3, $this->clock));
+
+        $this->assertSame('own-a', $c1->call('get_info')->node);
+        $this->assertSame('own-a', $c2->call('get_info')->node);
+        $this->assertSame('own-b', $c1->call('get_info', [], null, 'own-b')->node);
+        $e = $this->assertRpc(ErrorCategory::Budget, static fn () => $c2->call('get_info'));
+        $this->assertStringNotContains('example.invalid', $e->getMessage());
+        $this->assertStringContains('own-node calls per minute', $e->getMessage());
+        $this->assertCount(2, $t1->calls);
+        $this->assertCount(1, $t2->calls, 'a refused call does no I/O and tries no other node (nor the fallback)');
+        $this->assertTrue(file_exists($dir . '/own-calls.json'));
+        $this->assertFalse(file_exists($dir . '/fallback-calls.json'), 'the fallback count is a file of its own');
+
+        $this->clock->advance(61);
+        $this->assertSame('own-a', $c2->call('get_info')->node);
+    }
+
+    public function testTheOwnNodeCapDoesNotCountTheFallbackAndTheFallbackCapDoesNotCountOwnNodes(): void
+    {
+        $dir = $this->scratch() . '/shared';
+        $config = $this->config(['page_max_calls' => 20]);
+        $t = new FixtureTransport();
+        $c = $this->client(
+            $t,
+            Profile::Web,
+            $config,
+            CallLimiter::fallback($dir, 1, $this->clock),
+            CallLimiter::ownNodes($dir, 1, $this->clock),
+        );
+        $this->assertSame('own-a', $c->call('get_info')->node);
+        $this->assertSame('fallback', $c->call('get_info', [], null, 'fallback')->node);
+        $this->assertRpc(ErrorCategory::Budget, static fn () => $c->call('get_info'), 'own-a');
+        $this->assertRpc(ErrorCategory::Budget, static fn () => $c->call('get_info', [], null, 'fallback'), 'fallback');
+    }
+
+    public function testTheIndexerProfileIgnoresTheOwnNodeCap(): void
+    {
+        $dir = $this->scratch() . '/shared';
+        $config = $this->config();
+        $t = new FixtureTransport();
+        $c = $this->client($t, Profile::Indexer, $config, null, CallLimiter::ownNodes($dir, 1, $this->clock));
+        for ($i = 0; $i < 5; $i++) {
+            $this->assertSame('own-a', $c->call('get_info')->node);
+        }
+        $this->assertCount(5, $t->calls);
+        $this->assertFalse(file_exists($dir . '/own-calls.json'), 'the indexer never touches the web cap');
+    }
+
     public function testTheLimiterRefusesWhenItsFileCannotBeUsed(): void
     {
         $dir = $this->scratch() . '/blocked';
-        $limiter = new FallbackLimiter($dir . '/sub', 5, $this->clock);
+        $limiter = CallLimiter::fallback($dir . '/sub', 5, $this->clock);
         file_put_contents($dir, 'a file where the directory should be');
         $t = new FixtureTransport();
         $c = $this->client($t, Profile::Web, $this->config(['page_max_calls' => 20]), $limiter);
