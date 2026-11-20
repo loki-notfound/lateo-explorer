@@ -136,6 +136,126 @@ final class TransactionIndexerTest extends IndexerTestBase
         ]);
     }
 
+    // --- the shapes: untagged outputs and the miner transaction -------------------------------
+
+    public function testTheMinerTransactionsAndTheShapesOfTheRecordedBlocksAreStored(): void
+    {
+        // height => [miner tx version, outputs]
+        $expected = [40010 => [2, 2], 120974 => [3, 3], 295006 => [3, 2], 400878 => [3, 2], 481502 => [3, 1]];
+        foreach ($expected as $height => [$version, $outputs]) {
+            $this->setUp();
+            $this->storeRecordedBlock($height);
+            $this->txIndexer($this->txConfig())->run();
+            $row = $this->db->one('SELECT * FROM miner_txs');
+            $this->assertSame(1, $this->count('miner_txs'));
+            $this->assertSame($this->db->value('SELECT miner_tx_hash FROM blocks WHERE height = ?', [$height]), $row['hash']);
+            $this->assertSame([$height, $version, 0, $outputs, 0], [$row['height'], $row['version'], $row['rct_type'], $row['n_outputs'], $row['n_untagged_outputs']], (string) $height);
+            $this->assertSame(0, (int) $this->db->value('SELECT count(*) FROM transactions WHERE n_untagged_outputs IS NULL OR n_untagged_outputs <> 0'));
+        }
+    }
+
+    public function testOnlyBlocksWithTransactionsGetAMinerRowAndNoCallIsAdded(): void
+    {
+        $chain = FakeChain::synthetic(0, 30);
+        $server = $this->prepare($chain);
+        $summary = $this->txIndexer($this->txConfig())->run();
+        $this->assertSame(TxSummary::COMPLETE, $summary->outcome, $summary->note);
+        // The calls are those of a run without the miner rows: one get_block per block with
+        // transactions and /get_transactions in calls of at most a hundred hashes.
+        $this->assertSame(21, $summary->calls);
+        $this->assertSame(20, $server->served['get_block']);
+        $this->assertSame(1, $server->served['/get_transactions']);
+        $this->assertSame(20, $this->count('miner_txs'));
+        $this->assertSame(0, (int) $this->db->value('SELECT count(*) FROM miner_txs WHERE height % 3 = 0'), 'blocks without transactions have no row');
+        $this->assertSame(
+            (int) $this->db->value('SELECT count(*) FROM blocks WHERE num_txes > 0'),
+            (int) $this->db->value('SELECT count(*) FROM miner_txs m JOIN blocks b ON b.height = m.height AND b.miner_tx_hash = m.hash'),
+        );
+        $this->assertSame([3, 0, 2, 0], array_map('intval', array_values($this->db->one('SELECT version, rct_type, n_outputs, n_untagged_outputs FROM miner_txs WHERE height = 1') ?? [])));
+        $this->assertSame(30, $this->count('transactions'));
+    }
+
+    public function testUntaggedOutputsOfTransactionsAndOfMinerTransactionsAreCounted(): void
+    {
+        $chain = FakeChain::synthetic(1, 4);
+        $server = $this->prepare($chain);
+        $plain = ['amount' => 0, 'target' => ['to_key' => ['key' => str_repeat('ef', 32)]]];
+        $server->entryFor = static fn (string $hash, int $height, int $idx): array => TxServer::entry(
+            $hash,
+            $height,
+            TxServer::asJson($height === 2 ? ['vout' => [TxServer::output('ZPH'), $plain, $plain]] : []),
+        );
+        $server->mutateBlock = static function (int $height, array $result): array {
+            if ($height === 4) {
+                $miner = ['vout' => [TxServer::output('ZPH'), ['amount' => 1, 'target' => ['to_script' => ['script' => []]]]]];
+                $result['json'] = TxServer::blockJson($height, $miner);
+            }
+            return $result;
+        };
+        $summary = $this->txIndexer($this->txConfig())->run();
+        $this->assertSame(TxSummary::COMPLETE, $summary->outcome, $summary->note);
+        $this->assertSame(['2:3' => 2], $this->untaggedByHeight('transactions', 2), 'block 2 has two transactions');
+        $this->assertSame(0, (int) $this->db->value('SELECT sum(n_untagged_outputs) FROM transactions WHERE height <> 2'));
+        $this->assertSame(1, (int) $this->db->value('SELECT n_untagged_outputs FROM miner_txs WHERE height = 4'));
+        $this->assertSame(2, (int) $this->db->value('SELECT n_outputs FROM miner_txs WHERE height = 4'));
+        $this->assertSame(0, (int) $this->db->value('SELECT sum(n_untagged_outputs) FROM miner_txs WHERE height <> 4'));
+    }
+
+    /** @return array<string,int> "<n_untagged_outputs>:<n_outputs>" => rows, for the rows of one height */
+    private function untaggedByHeight(string $table, int $height): array
+    {
+        $out = [];
+        foreach ($this->db->all('SELECT n_outputs, n_untagged_outputs FROM ' . $table . ' WHERE height = ?', [$height]) as $r) {
+            $key = $r['n_untagged_outputs'] . ':' . $r['n_outputs'];
+            $out[$key] = ($out[$key] ?? 0) + 1;
+        }
+        return $out;
+    }
+
+    public function testAMalformedMinerTransactionEndsTheRunAndStoresNothingOfTheGroup(): void
+    {
+        $chain = FakeChain::synthetic(1, 8);
+        $server = $this->prepare($chain);
+        $cases = [
+            'no json' => static function (array $r): array { unset($r['json']); return $r; },
+            'json that does not parse' => static function (array $r): array { $r['json'] = '{'; return $r; },
+            'no miner_tx' => static function (array $r): array { $r['json'] = '{"tx_hashes": []}'; return $r; },
+            'no version' => static function (array $r): array {
+                $j = json_decode($r['json'], true);
+                unset($j['miner_tx']['version']);
+                $r['json'] = json_encode($j);
+                return $r;
+            },
+            'no vout' => static function (array $r): array {
+                $j = json_decode($r['json'], true);
+                unset($j['miner_tx']['vout']);
+                $r['json'] = json_encode($j);
+                return $r;
+            },
+            'no type' => static function (array $r): array {
+                $j = json_decode($r['json'], true);
+                $j['miner_tx']['rct_signatures'] = [];
+                $r['json'] = json_encode($j);
+                return $r;
+            },
+            'another miner_tx_hash' => static function (array $r): array { $r['miner_tx_hash'] = str_repeat('1', 64); return $r; },
+        ];
+        foreach ($cases as $what => $change) {
+            $server->mutateBlock = static fn (int $height, array $result): array => $height === 5 ? $change($result) : $result;
+            $summary = $this->txIndexer($this->txConfig())->run();
+            $this->assertSame(TxSummary::ERROR, $summary->outcome, $what);
+            $this->assertStringContains('invalid-data', $summary->note, $what);
+            // The blocks of the group before the bad one are not stored either: it is one group.
+            $this->assertSame(0, $this->count('transactions'), $what);
+            $this->assertSame(0, $this->count('miner_txs'), $what);
+            $this->assertNull($this->mark(), $what);
+        }
+        // Without the fault the same run stores everything.
+        $server->mutateBlock = null;
+        $this->assertSame(TxSummary::COMPLETE, $this->txIndexer($this->txConfig())->run()->outcome);
+        $this->assertSame((int) $this->db->value('SELECT count(*) FROM blocks WHERE num_txes > 0'), $this->count('miner_txs'));
+    }
+
     // --- synthetic chains ---------------------------------------------------------------------
 
     public function testOneRunStoresEveryBlockAndAdvancesTheMarkOverEmptyBlocks(): void

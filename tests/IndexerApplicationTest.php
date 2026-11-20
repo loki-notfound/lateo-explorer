@@ -77,7 +77,7 @@ final class IndexerApplicationTest extends IndexerTestBase
         $this->assertSame('own-a', $run['node']);
         $this->assertSame('complete', $run['outcome']);
         $this->assertSame('', $run['note']);
-        $this->assertSame(2, (int) $this->db->value('SELECT value FROM meta WHERE key = \'schema_version\''));
+        $this->assertSame(3, (int) $this->db->value('SELECT value FROM meta WHERE key = \'schema_version\''));
     }
 
     public function testTheLogLineAndErrorsNeverContainAnAddress(): void

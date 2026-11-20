@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lateo\Explorer\Db;
 
+use Lateo\Explorer\Indexer\MinerTransaction;
 use Lateo\Explorer\Indexer\Transaction;
 
 /**
@@ -32,18 +33,19 @@ final class TransactionStore
      * Stored blocks above $height (all of them when null), lowest first, with what the
      * transaction indexer needs.
      *
-     * @return list<array{height:int,hash:string,num_txes:int}>
+     * @return list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}>
      */
     public function blocksAbove(?int $height, int $upTo, int $limit): array
     {
         $rows = $this->db->all(
-            'SELECT height, hash, num_txes FROM blocks WHERE height > ? AND height <= ? ORDER BY height LIMIT ?',
+            'SELECT height, hash, num_txes, miner_tx_hash FROM blocks WHERE height > ? AND height <= ? ORDER BY height LIMIT ?',
             [$height ?? -1, $upTo, $limit],
         );
         return array_map(static fn (array $r): array => [
             'height' => (int) $r['height'],
             'hash' => (string) $r['hash'],
             'num_txes' => (int) $r['num_txes'],
+            'miner_tx_hash' => (string) $r['miner_tx_hash'],
         ], $rows);
     }
 
@@ -52,14 +54,16 @@ final class TransactionStore
      * the height of the last block of the group (a block without transactions has no rows).
      * The checks of the rows that need one (ConversionCheckStore) are stored in the same
      * transaction. The record a conversion refers to is at most 10 blocks below it, so it is
-     * stored by then; if it is not, the check says pr_missing.
+     * stored by then; if it is not, the check says pr_missing. The miner transactions of the
+     * blocks of the group that were asked for are stored in the same transaction.
      *
      * @param list<Transaction> $rows
+     * @param list<MinerTransaction> $miners
      * @return array{checks:int,match:int,mismatch:int,not_recomputed:int}
      */
-    public function storeBlocks(array $rows, int $mark): array
+    public function storeBlocks(array $rows, int $mark, array $miners = []): array
     {
-        return $this->db->transaction(function () use ($rows, $mark): array {
+        return $this->db->transaction(function () use ($rows, $mark, $miners): array {
             foreach ($rows as $t) {
                 if ($t->height > $mark) {
                     throw new \LogicException('a row above the mark');
@@ -67,15 +71,25 @@ final class TransactionStore
                 $this->db->exec(
                     'INSERT INTO transactions (hash, height, idx, version, rct_type, source_asset, source_gen,
                         dest_asset, dest_gen, tx_type, n_inputs, n_outputs, fee, pricing_record_height,
-                        amount_burnt, amount_minted)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        amount_burnt, amount_minted, n_untagged_outputs)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         $t->hash, $t->height, $t->idx, $t->version, $t->rctType,
                         $t->source->ticker, $t->source->generation->value,
                         $t->destination->ticker, $t->destination->generation->value,
                         $t->type, $t->inputs, $t->outputs, $t->fee, $t->pricingRecordHeight,
-                        $t->amountBurnt, $t->amountMinted,
+                        $t->amountBurnt, $t->amountMinted, $t->untaggedOutputs,
                     ],
+                );
+            }
+            foreach ($miners as $m) {
+                if ($m->height > $mark) {
+                    throw new \LogicException('a miner transaction above the mark');
+                }
+                $this->db->exec(
+                    'INSERT INTO miner_txs (height, hash, version, rct_type, n_outputs, n_untagged_outputs)
+                     VALUES (?, ?, ?, ?, ?, ?)',
+                    [$m->height, $m->hash, $m->version, $m->rctType, $m->outputs, $m->untaggedOutputs],
                 );
             }
             $counts = (new ConversionCheckStore($this->db))->checkAndStore(array_map(

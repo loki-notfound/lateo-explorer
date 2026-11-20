@@ -11,7 +11,7 @@ use Lateo\Explorer\Tests\Support\TestCase;
 final class DatabaseTest extends TestCase
 {
     private const TABLES = [
-        'blocks', 'conversion_checks', 'meta', 'orphaned_blocks', 'pricing_records', 'reorgs', 'runs', 'supply_snapshots', 'transactions',
+        'blocks', 'conversion_checks', 'meta', 'miner_txs', 'orphaned_blocks', 'pricing_records', 'reorgs', 'runs', 'supply_snapshots', 'transactions',
     ];
 
     /** @return list<string> */

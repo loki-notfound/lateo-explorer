@@ -252,6 +252,127 @@ final class TransactionParserTest extends TestCase
         $this->assertSame([5, 7, 9], [$t->pricingRecordHeight, $t->amountBurnt, $t->amountMinted]);
     }
 
+    // --- the outputs that are not tagged keys -------------------------------------------------
+
+    public function testTheOutputsOfAnotherVariantThanTheTaggedKeyAreCounted(): void
+    {
+        $this->assertSame(0, $this->synthetic()->untaggedOutputs);
+        $script = ['amount' => 0, 'target' => ['to_script' => ['script' => []]]];
+        $plain = ['amount' => 0, 'target' => ['to_key' => ['key' => str_repeat('ef', 32)]]];
+        $t = $this->synthetic(['vin' => [TxServer::input('ZPH')], 'vout' => [TxServer::output('ZPH'), $script, $plain]]);
+        $this->assertSame([3, 2], [$t->outputs, $t->untaggedOutputs]);
+        $this->assertSame('unknown', $t->type, 'the asset and type logic is unchanged');
+        // The daemon writes a scripthash target as a string, not an object: counted, not refused.
+        $hashed = ['amount' => 0, 'target' => ['scripthash' => str_repeat('ab', 32)]];
+        $t = $this->synthetic(['vin' => [TxServer::input('ZPH')], 'vout' => [TxServer::output('ZPH'), $hashed]]);
+        $this->assertSame([2, 1, 'unknown'], [$t->outputs, $t->untaggedOutputs, $t->type]);
+        $m = TransactionParser::parseMiner($this->answer(['vout' => [TxServer::output('ZPH'), $hashed]]), str_repeat('b2', 32), 7);
+        $this->assertSame([2, 1], [$m->outputs, $m->untaggedOutputs]);
+        foreach ([40010, 120974, 295006, 400878, 481502] as $height) {
+            foreach ($this->recorded($height) as $tx) {
+                $this->assertSame(0, $tx->untaggedOutputs, (string) $height);
+            }
+        }
+    }
+
+    // --- the miner transaction ----------------------------------------------------------------
+
+    /** @return array<string,mixed> the result member of a get_block answer that has the block's json */
+    private function answer(?array $miner = null, int $height = 7, ?string $hash = null): array
+    {
+        $hash ??= str_repeat('b2', 32);
+        return ['miner_tx_hash' => $hash, 'json' => TxServer::blockJson($height, $miner ?? [])];
+    }
+
+    private function invalidMiner(array $answer, string $expected, ?string $hash = null): void
+    {
+        $e = $this->assertThrows(IndexerException::class, fn () => TransactionParser::parseMiner($answer, $hash ?? str_repeat('b2', 32), 7));
+        $this->assertSame(FailureKind::InvalidData, $e->kind);
+        $this->assertStringContains($expected, $e->getMessage());
+    }
+
+    public function testTheMinerTransactionsOfTheRecordedBlocksPerHardFork(): void
+    {
+        // height => [block major version, miner tx version, outputs, miner_tx_hash]
+        $expected = [
+            40010 => [2, 2, 2],
+            120974 => [3, 3, 3],
+            295006 => [5, 3, 2],
+            400878 => [6, 3, 2],
+            481502 => [8, 3, 1],
+            536000 => [11, 3, 2],
+            905998 => [11, 3, 2],
+            910657 => [11, 3, 1],
+        ];
+        foreach ($expected as $height => [$major, $version, $outputs]) {
+            $answer = $this->fixture('get_block__height-' . $height)['result'];
+            $this->assertSame($major, $answer['block_header']['major_version']);
+            $m = TransactionParser::parseMiner($answer, $answer['miner_tx_hash'], $height);
+            $this->assertSame([$height, $answer['miner_tx_hash'], $version, 0, $outputs, 0], [$m->height, $m->hash, $m->version, $m->rctType, $m->outputs, $m->untaggedOutputs], (string) $height);
+        }
+    }
+
+    public function testAMinerTransactionCountsItsUntaggedOutputs(): void
+    {
+        $plain = ['amount' => 5, 'target' => ['to_key' => ['key' => str_repeat('ef', 32)]]];
+        $m = TransactionParser::parseMiner($this->answer(['vout' => [TxServer::output('ZPH'), $plain, $plain]]), str_repeat('b2', 32), 7);
+        $this->assertSame([3, 2, 3, 0], [$m->outputs, $m->untaggedOutputs, $m->version, $m->rctType]);
+    }
+
+    public function testAVersion1MinerTransactionHasNoRingSignaturesAndGetsType0(): void
+    {
+        $answer = $this->answer(['version' => 1]);
+        $json = json_decode($answer['json'], true);
+        unset($json['miner_tx']['rct_signatures']);
+        $json['miner_tx']['signatures'] = [];
+        $answer['json'] = json_encode($json);
+        $this->assertFalse(array_key_exists('rct_signatures', json_decode($answer['json'], true)['miner_tx']));
+        $m = TransactionParser::parseMiner($answer, str_repeat('b2', 32), 7);
+        $this->assertSame([1, 0], [$m->version, $m->rctType]);
+        // From version 2 on the member is required.
+        $json['miner_tx']['version'] = 2;
+        $this->invalidMiner(['json' => json_encode($json)] + $answer, 'rct_signatures');
+    }
+
+    public function testAMinerTransactionThatDoesNotFitIsRefused(): void
+    {
+        $hash = str_repeat('b2', 32);
+        $withBlock = static function (callable $change) use ($hash): array {
+            $json = json_decode(TxServer::blockJson(7), true);
+            $json = $change($json);
+            return ['miner_tx_hash' => $hash, 'json' => json_encode($json)];
+        };
+        $this->invalidMiner(['json' => TxServer::blockJson(7)], 'miner_tx_hash');
+        $this->invalidMiner($this->answer(), 'miner_tx_hash', str_repeat('c3', 32));
+        $this->invalidMiner(['miner_tx_hash' => $hash], 'no json');
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => ''], 'no json');
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => 5], 'no json');
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => '{'], 'not valid JSON');
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => '[1]'], 'not an object');
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => '{"tx_hashes": []}'], 'miner_tx');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx'] = 'x'; return $b; }), 'miner_tx');
+        $this->invalidMiner($withBlock(static function (array $b): array { unset($b['miner_tx']['version']); return $b; }), 'version');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['version'] = -1; return $b; }), 'version');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['version'] = 256; return $b; }), 'version');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['version'] = '3'; return $b; }), 'version');
+        $this->invalidMiner($withBlock(static function (array $b): array { unset($b['miner_tx']['vout']); return $b; }), 'vout');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'] = []; return $b; }), 'vout');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'] = 'x'; return $b; }), 'vout');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'] = ['a' => 1]; return $b; }), 'vout');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'] = ['x']; return $b; }), 'output');
+        $this->invalidMiner($withBlock(static function (array $b): array { unset($b['miner_tx']['vout'][0]['target']); return $b; }), 'target');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'][0]['target'] = ['a' => [], 'b' => []]; return $b; }), 'target');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['vout'][0]['target'] = ['tagged_key' => 'x']; return $b; }), 'tagged_key output target');
+        $this->invalidMiner($withBlock(static function (array $b): array { unset($b['miner_tx']['vout'][0]['amount']); return $b; }), 'amount');
+        $this->invalidMiner($withBlock(static function (array $b): array { unset($b['miner_tx']['rct_signatures']); return $b; }), 'rct_signatures');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['rct_signatures'] = []; return $b; }), 'rct_signatures');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['rct_signatures'] = ['txnFee' => 1]; return $b; }), 'type');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['rct_signatures']['type'] = '0'; return $b; }), 'type');
+        $this->invalidMiner($withBlock(static function (array $b): array { $b['miner_tx']['rct_signatures']['type'] = 300; return $b; }), 'type');
+        // An amount above the signed 64-bit range is refused, not rounded.
+        $this->invalidMiner(['miner_tx_hash' => $hash, 'json' => str_replace('"amount":1000', '"amount":18446744073709551615', TxServer::blockJson(7))], 'amount');
+    }
+
     // --- exact numbers ------------------------------------------------------------------------
 
     public function testNumbersAbove2To53StayExact(): void

@@ -33,6 +33,8 @@ final readonly class Transaction
         public int $pricingRecordHeight,
         public int $amountBurnt,
         public int $amountMinted,
+        /** Outputs whose target variant is not tagged_key. */
+        public int $untaggedOutputs,
     ) {
     }
 }

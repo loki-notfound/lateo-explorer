@@ -73,6 +73,35 @@ final class TxServer
         return (string) preg_replace('/"#(\d+)"/', '$1', $json);
     }
 
+    /**
+     * The "json" string of a get_block answer: the daemon's JSON of the block, of which only
+     * the miner transaction matters here. $miner replaces members of the default miner
+     * transaction (version 3, two tagged outputs, type 0).
+     *
+     * @param array<string,mixed> $miner
+     */
+    public static function blockJson(int $height, array $miner = []): string
+    {
+        $out = static fn (string $asset): array => ['amount' => 1000, 'target' => ['tagged_key' => [
+            'key' => str_repeat('ab', 32), 'asset_type' => $asset, 'view_tag' => '01',
+        ]]];
+        $tx = $miner + [
+            'version' => 3,
+            'unlock_time' => $height + 60,
+            'vin' => [['gen' => ['height' => $height]]],
+            'vout' => [$out('ZPH'), $out('ZSD')],
+            'extra' => [1, 2, 3],
+            'pricing_record_height' => 0,
+            'amount_burnt' => 0,
+            'amount_minted' => 0,
+            'rct_signatures' => ['type' => 0],
+        ];
+        return json_encode(
+            ['major_version' => 11, 'minor_version' => 11, 'timestamp' => 1, 'miner_tx' => $tx, 'tx_hashes' => []],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+        );
+    }
+
     /** One input of the "key" variant. @return array<string,mixed> */
     public static function input(string $asset): array
     {
@@ -115,7 +144,12 @@ final class TxServer
             for ($i = 0; $i < (int) $header['num_txes']; $i++) {
                 $hashes[] = self::hashOf($height, $i);
             }
-            $result = ['block_header' => $header, 'miner_tx_hash' => $header['miner_tx_hash'], 'tx_hashes' => $hashes];
+            $result = [
+                'block_header' => $header,
+                'miner_tx_hash' => $header['miner_tx_hash'],
+                'json' => self::blockJson($height),
+                'tx_hashes' => $hashes,
+            ];
             if ($this->mutateBlock !== null) {
                 $result = ($this->mutateBlock)($height, $result);
             }

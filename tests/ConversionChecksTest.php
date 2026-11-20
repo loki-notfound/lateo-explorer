@@ -148,7 +148,7 @@ final class ConversionChecksTest extends IndexerTestBase
     {
         return new Transaction(
             TxServer::hashOf($height, $idx), $height, $idx, 3, 6, Asset::fromChain($from), Asset::fromChain($to),
-            $type, 2, 4, 1000, $prh, $burnt, $minted,
+            $type, 2, 4, 1000, $prh, $burnt, $minted, 0,
         );
     }
 
@@ -241,7 +241,7 @@ final class ConversionChecksTest extends IndexerTestBase
         $this->storeRecordBlock(905996);
         $this->storeBlock(905998);
         $t = $this->fixtureTx905998();
-        $moved = new Transaction($t->hash, $t->height, $t->idx, $t->version, $t->rctType, $t->source, $t->destination, $t->type, $t->inputs, $t->outputs, $t->fee, 905987, $t->amountBurnt, $t->amountMinted);
+        $moved = new Transaction($t->hash, $t->height, $t->idx, $t->version, $t->rctType, $t->source, $t->destination, $t->type, $t->inputs, $t->outputs, $t->fee, 905987, $t->amountBurnt, $t->amountMinted, $t->untaggedOutputs);
         $this->txStore->storeBlocks([$moved], 905998);
         $this->assertSame('age_out_of_window', $this->db->value('SELECT reason FROM conversion_checks'));
         $this->db->exec('DELETE FROM conversion_checks');
@@ -263,7 +263,7 @@ final class ConversionChecksTest extends IndexerTestBase
         $this->storeRecordBlock(905996);
         $this->storeBlock(905998);
         $t = $this->fixtureTx905998();
-        $wrong = new Transaction($t->hash, $t->height, $t->idx, $t->version, $t->rctType, $t->source, $t->destination, $t->type, $t->inputs, $t->outputs, $t->fee, $t->pricingRecordHeight, $t->amountBurnt, $t->amountMinted + 1);
+        $wrong = new Transaction($t->hash, $t->height, $t->idx, $t->version, $t->rctType, $t->source, $t->destination, $t->type, $t->inputs, $t->outputs, $t->fee, $t->pricingRecordHeight, $t->amountBurnt, $t->amountMinted + 1, $t->untaggedOutputs);
         $counts = $this->txStore->storeBlocks([$wrong], 905998);
         $this->assertSame(['checks' => 1, 'match' => 0, 'mismatch' => 1, 'not_recomputed' => 0], $counts);
         $row = $this->db->one('SELECT * FROM conversion_checks');
@@ -337,7 +337,7 @@ final class ConversionChecksTest extends IndexerTestBase
         $this->assertSame(0, (int) $db->value("SELECT count(*) FROM sqlite_master WHERE name = 'conversion_checks'"));
         Schema::migrate($db);
         $this->assertSame(1, (int) $db->value("SELECT count(*) FROM sqlite_master WHERE name = 'conversion_checks'"));
-        $this->assertTrue(Schema::VERSION === 2, 'the table is part of version 2');
+        $this->assertTrue(Schema::VERSION >= 2, 'the table is part of version 2');
     }
 
     public function testTheLogFieldsHoldTheCountsOfTheChecks(): void

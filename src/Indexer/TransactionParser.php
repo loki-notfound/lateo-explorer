@@ -102,7 +102,93 @@ final class TransactionParser
             pricingRecordHeight: self::uint($tx, 'pricing_record_height'),
             amountBurnt: self::uint($tx, 'amount_burnt'),
             amountMinted: self::uint($tx, 'amount_minted'),
+            untaggedOutputs: self::untaggedOutputs($vout),
         );
+    }
+
+    /**
+     * The miner transaction of a block, from the answer of get_block (its "json" string holds
+     * the daemon's JSON of the block, with the member miner_tx). Strict, as untrusted input:
+     * the answer's miner_tx_hash must be the stored one, and version, vout and the type of the
+     * ringct signatures must be there. A version 1 transaction has no rct_signatures in the
+     * daemon's JSON (it has signatures instead); then the type is 0. From version 2 on the
+     * daemon writes rct_signatures with a type (0 for a miner transaction) and the member
+     * is required.
+     *
+     * @param array<string,mixed> $answer the result member of the get_block answer
+     * @param string $expectedHash the miner_tx_hash stored for the block
+     * @throws IndexerException
+     */
+    public static function parseMiner(array $answer, string $expectedHash, int $height): MinerTransaction
+    {
+        if (($answer['miner_tx_hash'] ?? null) !== $expectedHash) {
+            throw self::bad('get_block has another miner_tx_hash than the stored one');
+        }
+        $json = $answer['json'] ?? null;
+        if (!is_string($json) || $json === '') {
+            throw self::bad('get_block has no json string');
+        }
+        try {
+            $block = json_decode($json, true, 64, JSON_BIGINT_AS_STRING | JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            throw self::bad('the json of get_block is not valid JSON');
+        }
+        if (!is_array($block) || array_is_list($block)) {
+            throw self::bad('the json of get_block is not an object');
+        }
+        $miner = $block['miner_tx'] ?? null;
+        if (!is_array($miner) || array_is_list($miner)) {
+            throw self::bad('miner_tx is not an object');
+        }
+        $version = self::uint($miner, 'version', 255, 'miner_tx.version');
+        $vout = $miner['vout'] ?? null;
+        if (!is_array($vout) || !array_is_list($vout) || $vout === []) {
+            throw self::bad('miner_tx.vout is not a non-empty list');
+        }
+        $rct = $miner['rct_signatures'] ?? null;
+        if ($rct === null && $version === 1) {
+            $rctType = 0;
+        } else {
+            if (!is_array($rct) || array_is_list($rct)) {
+                throw self::bad('miner_tx.rct_signatures is not an object');
+            }
+            $rctType = self::uint($rct, 'type', 255, 'miner_tx.rct_signatures.type');
+        }
+        foreach ($vout as $output) {
+            if (!is_array($output) || array_is_list($output)) {
+                throw self::bad('an output of the miner transaction is not an object');
+            }
+            self::uint($output, 'amount', label: 'miner output amount');
+        }
+
+        return new MinerTransaction($height, $expectedHash, $version, $rctType, count($vout), self::untaggedOutputs($vout));
+    }
+
+    /**
+     * The number of outputs whose target variant is not tagged_key. Every output must be an
+     * object with a target that is an object with exactly one variant; the body of another
+     * variant than tagged_key is not looked at (it may be a string).
+     *
+     * @param list<mixed> $vout
+     */
+    private static function untaggedOutputs(array $vout): int
+    {
+        $n = 0;
+        foreach ($vout as $output) {
+            if (!is_array($output) || array_is_list($output)) {
+                throw self::bad('an output is not an object');
+            }
+            $target = $output['target'] ?? null;
+            if (!is_array($target) || array_is_list($target) || count($target) !== 1) {
+                throw self::bad('an output target is not an object with one variant');
+            }
+            if (array_key_first($target) !== 'tagged_key') {
+                $n++;
+            } elseif (!is_array($target['tagged_key']) || array_is_list($target['tagged_key'])) {
+                throw self::bad('a tagged_key output target is not an object');
+            }
+        }
+        return $n;
     }
 
     /**
@@ -152,12 +238,18 @@ final class TransactionParser
             if (!is_array($target) || array_is_list($target) || count($target) !== 1) {
                 throw self::bad('an output target is not an object with one variant');
             }
-            $body = $target[array_key_first($target)];
+            // Another variant than tagged_key carries no asset; its body is not looked at (the
+            // daemon writes a scripthash target as a string).
+            if (array_key_first($target) !== 'tagged_key') {
+                $outputOk = false;
+                continue;
+            }
+            $body = $target['tagged_key'];
             if (!is_array($body) || array_is_list($body)) {
-                throw self::bad('an output target variant is not an object');
+                throw self::bad('a tagged_key output target is not an object');
             }
             $asset = $body['asset_type'] ?? null;
-            if (array_key_first($target) !== 'tagged_key' || !is_string($asset)) {
+            if (!is_string($asset)) {
                 $outputOk = false;
                 continue;
             }

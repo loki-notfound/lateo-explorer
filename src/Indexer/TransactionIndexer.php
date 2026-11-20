@@ -31,8 +31,12 @@ use Lateo\Explorer\Support\Clock;
  *   none in the pool, each entry's tx_hash equal to the hash asked and its block_height equal
  *   to the block's (a pool entry or another height means the chain moved: the run stops with
  *   a note);
- * - the rows of the whole blocks of a group are stored with the new mark and with the
- *   conversion checks of the rows (ConversionRule, from the stored pricing records) in one
+ * - the miner transaction of each block asked for is read from the same get_block answer (its
+ *   json string: version, outputs, type of the ringct signatures) and its miner_tx_hash must be
+ *   the stored one; no further call is made for it;
+ * - the rows of the whole blocks of a group are stored with the miner transactions of its blocks,
+ *   the new mark and the conversion checks of the rows (ConversionRule, from the stored pricing
+ *   records) in one
  *   transaction; never a part of a block. A mismatch does not stop the run and is not worded
  *   anywhere: it is a row in conversion_checks and a count in the log line;
  * - the run's time is the part of run_seconds the header run left; a get_block is not started
@@ -133,8 +137,8 @@ final class TransactionIndexer
      * blocks with transactions are added while their hashes together stay within MAX_HASHES
      * (a single block with more is a group of its own).
      *
-     * @param non-empty-list<array{height:int,hash:string,num_txes:int}> $page
-     * @return non-empty-list<array{height:int,hash:string,num_txes:int}>
+     * @param non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}> $page
+     * @return non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}>
      */
     private static function group(array $page): array
     {
@@ -147,7 +151,7 @@ final class TransactionIndexer
             $group[] = $block;
             $total += $block['num_txes'];
         }
-        /** @var non-empty-list<array{height:int,hash:string,num_txes:int}> $group */
+        /** @var non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}> $group */
         return $group;
     }
 
@@ -155,7 +159,7 @@ final class TransactionIndexer
      * Fetch, check and store one group. Returns false when the run ends (time used up, or the
      * chain moved); the mark has then moved over what was stored.
      *
-     * @param non-empty-list<array{height:int,hash:string,num_txes:int}> $group
+     * @param non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}> $group
      * @param non-empty-list<string> $labels
      */
     private function handle(array $group, array $labels): bool
@@ -174,9 +178,9 @@ final class TransactionIndexer
                 $last = $e;
                 continue;
             }
-            [$rows, $done, $moved, $timeUp] = $result;
+            [$rows, $done, $moved, $timeUp, $miners] = $result;
             if ($done !== []) {
-                $this->record($rows, $done[array_key_last($done)]['height'], $done, count($rows));
+                $this->record($rows, $done[array_key_last($done)]['height'], $done, count($rows), $miners);
             }
             if ($moved) {
                 $this->outcome = TxSummary::STOPPED;
@@ -196,9 +200,10 @@ final class TransactionIndexer
      * here. The blocks it covers are a prefix of the group: every block in it either has no
      * transactions or has been fetched with all of its transactions.
      *
-     * @param non-empty-list<array{height:int,hash:string,num_txes:int}> $group
-     * @return array{0:list<Transaction>,1:list<array{height:int,hash:string,num_txes:int}>,2:bool,3:bool}
-     *         the rows, the blocks they cover, whether the chain moved, whether the time ran out
+     * @param non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}> $group
+     * @return array{0:list<Transaction>,1:list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}>,2:bool,3:bool,4:list<MinerTransaction>}
+     *         the rows, the blocks they cover, whether the chain moved, whether the time ran out,
+     *         the miner transactions of the covered blocks that were asked for
      * @throws RpcException
      */
     private function fetchGroup(array $group, string $label): array
@@ -206,11 +211,13 @@ final class TransactionIndexer
         /** @var list<array{hash:string,height:int,idx:int}> $asked */
         $asked = [];
         $done = [];
+        $miners = [];
         $moved = false;
         $timeUp = false;
         foreach ($group as $block) {
             if ($block['num_txes'] > 0) {
-                $hashes = $this->fetchBlock($block, $label);
+                $fetched = $this->fetchBlock($block, $label);
+                $hashes = is_array($fetched) ? $fetched['hashes'] : $fetched;
                 if ($hashes === false) {
                     $timeUp = true;
                     break;
@@ -219,6 +226,7 @@ final class TransactionIndexer
                     $moved = true;
                     break;
                 }
+                $miners[] = $fetched['miner'];
                 foreach ($hashes as $idx => $hash) {
                     $asked[] = ['hash' => $hash, 'height' => $block['height'], 'idx' => $idx];
                 }
@@ -230,17 +238,18 @@ final class TransactionIndexer
         }
         $rows = $this->fetchTransactions($asked, $label);
         if ($rows === null) {
-            return [[], [], true, false]; // nothing of this group is kept
+            return [[], [], true, false, []]; // nothing of this group is kept
         }
-        return [$rows, $done, $moved, $timeUp];
+        return [$rows, $done, $moved, $timeUp, $miners];
     }
 
     /**
-     * One get_block; the hashes of its transactions, null when the node's block at that height
-     * is not the stored one, or false when the run's time is over (nothing was asked).
+     * One get_block; the hashes of its transactions and its miner transaction, null when the
+     * node's block at that height is not the stored one, or false when the run's time is over
+     * (nothing was asked).
      *
-     * @param array{height:int,hash:string,num_txes:int} $block
-     * @return list<string>|null|false
+     * @param array{height:int,hash:string,num_txes:int,miner_tx_hash:string} $block
+     * @return array{hashes:list<string>,miner:MinerTransaction}|null|false
      * @throws RpcException
      */
     private function fetchBlock(array $block, string $label): array|null|false
@@ -270,7 +279,7 @@ final class TransactionIndexer
             }
         }
         /** @var list<string> $hashes */
-        return $hashes;
+        return ['hashes' => $hashes, 'miner' => TransactionParser::parseMiner($result->data, $block['miner_tx_hash'], $block['height'])];
     }
 
     /**
@@ -337,11 +346,12 @@ final class TransactionIndexer
 
     /**
      * @param list<Transaction> $rows
-     * @param non-empty-list<array{height:int,hash:string,num_txes:int}> $blocks
+     * @param non-empty-list<array{height:int,hash:string,num_txes:int,miner_tx_hash:string}> $blocks
+     * @param list<MinerTransaction> $miners
      */
-    private function record(array $rows, int $mark, array $blocks, int $transactions): void
+    private function record(array $rows, int $mark, array $blocks, int $transactions, array $miners = []): void
     {
-        $counts = $this->store->storeBlocks($rows, $mark);
+        $counts = $this->store->storeBlocks($rows, $mark, $miners);
         foreach ($counts as $key => $n) {
             $this->checks[$key] += $n;
         }

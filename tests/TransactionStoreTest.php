@@ -11,13 +11,14 @@ use Lateo\Explorer\Db\Database;
 use Lateo\Explorer\Db\Schema;
 use Lateo\Explorer\Db\TransactionStore;
 use Lateo\Explorer\Indexer\HeaderParser;
+use Lateo\Explorer\Indexer\MinerTransaction;
 use Lateo\Explorer\Indexer\Transaction;
 use Lateo\Explorer\Indexer\TransactionIndexer;
 use Lateo\Explorer\Tests\Support\FakeChain;
 use Lateo\Explorer\Tests\Support\IndexerTestBase;
 use Lateo\Explorer\Tests\Support\TxServer;
 
-/** Schema version 2, the transaction store, and what a rollback does to transactions. */
+/** Schema versions 2 and 3, the transaction store, and what a rollback does to transactions. */
 final class TransactionStoreTest extends IndexerTestBase
 {
     private TransactionStore $txStore;
@@ -55,6 +56,7 @@ final class TransactionStoreTest extends IndexerTestBase
             0,
             0,
             0,
+            0,
         );
     }
 
@@ -77,8 +79,8 @@ final class TransactionStoreTest extends IndexerTestBase
         ];
         $this->assertSame(0, (int) $db->value("SELECT count(*) FROM sqlite_master WHERE name = 'transactions'"));
 
-        $this->assertSame(2, Schema::migrate($db));
-        $this->assertSame(2, Schema::currentVersion($db));
+        $this->assertSame(Schema::VERSION, Schema::migrate($db));
+        $this->assertSame(Schema::VERSION, Schema::currentVersion($db));
         $after = [
             $db->all('SELECT * FROM blocks ORDER BY height'),
             $db->all('SELECT * FROM pricing_records ORDER BY height'),
@@ -91,13 +93,103 @@ final class TransactionStoreTest extends IndexerTestBase
         // The database works with version 2 code.
         (new TransactionStore($db))->storeBlocks([$this->tx(2, 0)], 5);
         $this->assertSame(5, (new TransactionStore($db))->indexedHeight());
-        $this->assertSame(2, Schema::migrate($db), 'a second migration finds nothing to do');
+        $this->assertSame(Schema::VERSION, Schema::migrate($db), 'a second migration finds nothing to do');
     }
 
-    public function testVersion1CodeRefusesAVersion2Database(): void
+    public function testVersion1AndVersion2CodeRefuseAVersion3Database(): void
     {
         $e = $this->assertThrows(\RuntimeException::class, fn () => Schema::migrate($this->db, [1 => Schema::migrations()[1]]));
         $this->assertStringContains('newer', $e->getMessage());
+        $migrations = Schema::migrations();
+        $e = $this->assertThrows(\RuntimeException::class, fn () => Schema::migrate($this->db, [1 => $migrations[1], 2 => $migrations[2]]));
+        $this->assertStringContains('newer', $e->getMessage());
+    }
+
+    public function testAVersion2DatabaseMigratesToVersion3AndKeepsItsRowsWithNullInTheNewColumn(): void
+    {
+        $db = Database::memory();
+        $migrations = Schema::migrations();
+        $this->assertSame(2, Schema::migrate($db, [1 => $migrations[1], 2 => $migrations[2]]));
+        $chain = FakeChain::synthetic(1, 10);
+        (new ChainStore($db))->insertBatch($this->headers($chain, 1, 10));
+        $hash = TxServer::hashOf(2, 0);
+        $db->exec(
+            "INSERT INTO transactions (hash, height, idx, version, rct_type, source_asset, source_gen, dest_asset, dest_gen,
+                tx_type, n_inputs, n_outputs, fee, pricing_record_height, amount_burnt, amount_minted)
+             VALUES (?, 2, 0, 3, 6, 'ZPH', 'new', 'ZPH', 'new', 'transfer', 2, 4, 1000, 0, 0, 0)",
+            [$hash],
+        );
+        $before = $db->all('SELECT * FROM transactions');
+
+        $this->assertSame(3, Schema::migrate($db));
+        $this->assertSame(3, Schema::currentVersion($db));
+        $after = $db->all('SELECT * FROM transactions');
+        $this->assertSame(1, count($after));
+        $this->assertNull($after[0]['n_untagged_outputs'], 'a row of version 2 code has NULL');
+        unset($after[0]['n_untagged_outputs']);
+        $this->assertSame($before, $after, 'nothing else of the row changed');
+        $this->assertSame(0, (int) $db->value('SELECT count(*) FROM miner_txs'));
+        // Version 3 code writes the column.
+        (new TransactionStore($db))->storeBlocks([$this->tx(3, 0)], 5);
+        $this->assertSame(0, (int) $db->value('SELECT n_untagged_outputs FROM transactions WHERE height = 3'));
+    }
+
+    public function testTheMinerTableAndTheNewColumnRefuseWhatTheyShouldRefuse(): void
+    {
+        $sql = (string) $this->db->value("SELECT sql FROM sqlite_master WHERE name = 'miner_txs'");
+        $this->assertStringContains('WITHOUT ROWID', $sql);
+        $this->assertSame(
+            ['height', 'hash', 'version', 'rct_type', 'n_outputs', 'n_untagged_outputs'],
+            array_map(static fn (array $r): string => (string) $r['name'], $this->db->all("SELECT name FROM pragma_table_info('miner_txs') ORDER BY cid")),
+        );
+        $chain = FakeChain::synthetic(1, 5);
+        $this->store->insertBatch($this->headers($chain, 1, 5));
+        $insert = 'INSERT INTO miner_txs (height, hash, version, rct_type, n_outputs, n_untagged_outputs) VALUES (?, ?, ?, ?, ?, ?)';
+        $good = [1, str_repeat('a', 64), 3, 0, 2, 0];
+        $this->db->exec($insert, $good);
+        foreach ([
+            [1, str_repeat('b', 64), 3, 0, 2, 0], // height twice
+            [99, str_repeat('b', 64), 3, 0, 2, 0], // a block that is not stored
+            [2, str_repeat('A', 64), 3, 0, 2, 0], // upper case
+            [2, str_repeat('b', 63), 3, 0, 2, 0], // short
+            [2, str_repeat('b', 64), -1, 0, 2, 0],
+            [2, str_repeat('b', 64), 3, -1, 2, 0],
+            [2, str_repeat('b', 64), 3, 0, -1, 0],
+            [2, str_repeat('b', 64), 3, 0, 2, -1],
+            [2, null, 3, 0, 2, 0],
+            [2, str_repeat('b', 64), 3, 0, 2, null],
+        ] as $row) {
+            $this->assertThrows(\PDOException::class, fn () => $this->db->exec($insert, $row), json_encode($row));
+        }
+        $this->assertSame(1, $this->count('miner_txs'));
+        $this->db->exec(
+            "INSERT INTO transactions (hash, height, idx, version, rct_type, source_asset, source_gen, dest_asset, dest_gen,
+                tx_type, n_inputs, n_outputs, fee, pricing_record_height, amount_burnt, amount_minted, n_untagged_outputs)
+             VALUES (?, 2, 0, 3, 6, 'ZPH', 'new', 'ZPH', 'new', 'transfer', 2, 4, 1000, 0, 0, 0, NULL)",
+            [TxServer::hashOf(2, 0)],
+        );
+        $this->assertSame(1, $this->count('transactions'), 'NULL is allowed in the column');
+        $this->assertThrows(\PDOException::class, fn () => $this->db->exec('UPDATE transactions SET n_untagged_outputs = -1'));
+    }
+
+    public function testMinerRowsAndTheMarkAreStoredTogetherOrNotAtAll(): void
+    {
+        $chain = FakeChain::synthetic(1, 10);
+        $this->store->insertBatch($this->headers($chain, 1, 10));
+        $miner = static fn (int $h): MinerTransaction => new MinerTransaction($h, $chain->at($h)['miner_tx_hash'], 3, 0, 2, 1);
+        $this->txStore->storeBlocks([$this->tx(2, 0)], 3, [$miner(2), $miner(3)]);
+        $this->assertSame(3, $this->txStore->indexedHeight());
+        $this->assertSame([[2, 2, 1], [3, 2, 1]], array_map(
+            static fn (array $r): array => [(int) $r['height'], (int) $r['n_outputs'], (int) $r['n_untagged_outputs']],
+            $this->db->all('SELECT * FROM miner_txs ORDER BY height'),
+        ));
+        // A second row for a height already stored: nothing of the call is kept, the mark stays.
+        $this->assertThrows(\PDOException::class, fn () => $this->txStore->storeBlocks([$this->tx(5, 0)], 6, [$miner(5), $miner(3)]));
+        $this->assertSame(3, $this->txStore->indexedHeight());
+        $this->assertSame(2, $this->count('miner_txs'));
+        $this->assertSame(1, $this->count('transactions'));
+        $this->assertThrows(\LogicException::class, fn () => $this->txStore->storeBlocks([], 4, [$miner(5)]));
+        $this->assertSame(2, $this->count('miner_txs'));
     }
 
     public function testTheTransactionsTableIsWithoutRowidAndHasTheIndexes(): void
@@ -109,6 +201,7 @@ final class TransactionStoreTest extends IndexerTestBase
         $this->assertSame([
             'hash', 'height', 'idx', 'version', 'rct_type', 'source_asset', 'source_gen', 'dest_asset', 'dest_gen',
             'tx_type', 'n_inputs', 'n_outputs', 'fee', 'pricing_record_height', 'amount_burnt', 'amount_minted',
+            'n_untagged_outputs',
         ], $cols);
         $this->assertSame(0, (int) $this->db->value("SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = 'transactions_height'"));
         // The unique (height, idx) index serves the rollback and every query by height.
@@ -238,6 +331,24 @@ final class TransactionStoreTest extends IndexerTestBase
         $this->assertSame(6, $this->txStore->indexedHeight(), 'the mark is the fork height');
         $this->assertSame(6, $this->count('blocks'));
         $this->assertSame((int) $this->db->value('SELECT count(*) FROM transactions WHERE height <= 6'), $this->count('transactions'), 'what is below stays');
+    }
+
+    public function testARollbackDeletesTheMinerRowsAboveTheForkInTheSameTransaction(): void
+    {
+        $chain = $this->fillTransactions();
+        $rows = [];
+        foreach (range(1, 10) as $h) {
+            $rows[] = new MinerTransaction($h, $chain->at($h)['miner_tx_hash'], 3, 0, 2, $h % 2);
+        }
+        $this->txStore->storeBlocks([], 10, $rows);
+        $this->assertSame(10, $this->count('miner_txs'));
+
+        $this->store->rollbackAbove(6, 'own-a', 1_800_000_000);
+        $this->assertSame(6, $this->count('miner_txs'));
+        $this->assertSame(0, (int) $this->db->value('SELECT count(*) FROM miner_txs WHERE height > 6'));
+        $this->assertSame(6, (int) $this->db->value('SELECT max(height) FROM miner_txs'));
+        $this->assertSame(6, $this->count('blocks'), 'the blocks went in the same transaction');
+        $this->assertSame(6, $this->txStore->indexedHeight());
     }
 
     public function testARollbackKeepsAMarkBelowTheFork(): void

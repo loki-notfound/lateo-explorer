@@ -15,13 +15,16 @@ namespace Lateo\Explorer\Db;
  * stored as decimal TEXT. Times are Unix seconds (UTC).
  *
  * Version 2 adds the transactions table, the derived table conversion_checks and, in meta,
- * the key tx_indexed_height (written by the transaction indexer, lowered by a rollback). Rolling the code back to version 1 is not
- * supported: a database of version 2 is refused by version 1 code ("newer than this code").
+ * the key tx_indexed_height (written by the transaction indexer, lowered by a rollback).
+ * Version 3 adds transactions.n_untagged_outputs (NULL on rows stored by version 2 code) and the
+ * table miner_txs, one row per block the transaction indexer asked for. Rolling the code back to
+ * an older version is not supported: a database of a newer version is refused by older code
+ * ("newer than this code").
  */
 final class Schema
 {
     /** The version this code writes. */
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /**
      * Migrations by version: the statements that bring a database from version N-1 to N.
@@ -188,6 +191,29 @@ final class Schema
                 ) WITHOUT ROWID',
                 'CREATE INDEX conversion_checks_height ON conversion_checks (height)',
                 'CREATE INDEX conversion_checks_verdict ON conversion_checks (verdict, hard_fork)',
+            ],
+            3 => [
+                // The number of outputs of a transaction whose target variant is not
+                // tagged_key. NULL only on rows that version 2 code stored; version 3 code
+                // always writes it.
+                'ALTER TABLE transactions ADD COLUMN n_untagged_outputs INTEGER
+                    CHECK (n_untagged_outputs IS NULL OR n_untagged_outputs >= 0)',
+
+                // The shape of the miner transaction of every block whose get_block answer the
+                // transaction indexer read (blocks with transactions only: a block without
+                // transactions is not asked and has no row). hash is the block's
+                // miner_tx_hash. rct_type is 0 for a miner transaction (the daemon writes type 0
+                // for version 2 and later and no rct_signatures at all for version 1). No
+                // amounts, keys, unlock_time or extra are stored. A rollback deletes the rows
+                // above the fork.
+                'CREATE TABLE miner_txs (
+                    height INTEGER PRIMARY KEY REFERENCES blocks (height),
+                    hash TEXT NOT NULL CHECK (length(hash) = 64 AND hash NOT GLOB \'*[^0-9a-f]*\'),
+                    version INTEGER NOT NULL CHECK (version >= 0),
+                    rct_type INTEGER NOT NULL CHECK (rct_type >= 0),
+                    n_outputs INTEGER NOT NULL CHECK (n_outputs >= 0),
+                    n_untagged_outputs INTEGER NOT NULL CHECK (n_untagged_outputs >= 0)
+                ) WITHOUT ROWID',
             ],
         ];
     }

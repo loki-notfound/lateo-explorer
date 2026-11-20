@@ -6,6 +6,7 @@ namespace Lateo\Explorer\Tests;
 
 use Lateo\Explorer\Chain\Asset;
 use Lateo\Explorer\Cli\RecomputeApplication;
+use Lateo\Explorer\Cli\ShapesApplication;
 use Lateo\Explorer\Cli\VectorsApplication;
 use Lateo\Explorer\Db\ChainStore;
 use Lateo\Explorer\Db\Database;
@@ -21,7 +22,7 @@ use Lateo\Explorer\Tests\Support\SkipTest;
 use Lateo\Explorer\Tests\Support\TxServer;
 
 /**
- * bin/recompute.php and bin/vectors.php (their classes, and the scripts as processes), on a
+ * bin/recompute.php, bin/vectors.php and bin/shapes.php (their classes, and the scripts as processes), on a
  * database built from the recorded blocks: four recorded blocks with a conversion or an audit
  * and the redeem of block 905998.
  */
@@ -146,7 +147,7 @@ final class CommandsTest extends IndexerTestBase
         $rows = [];
         foreach ([5, 6, 7] as $height) {
             for ($i = 0; $i < 400; $i++) {
-                $rows[] = new Transaction(TxServer::hashOf($height, $i), $height, $i, 3, 6, Asset::fromChain('ZPH'), Asset::fromChain('ZPH'), 'unknown', 1, 2, 1, 0, 0, 0);
+                $rows[] = new Transaction(TxServer::hashOf($height, $i), $height, $i, 3, 6, Asset::fromChain('ZPH'), Asset::fromChain('ZPH'), 'unknown', 1, 2, 1, 0, 0, 0, 0);
             }
         }
         (new TransactionStore($this->db))->storeBlocks($rows, 7);
@@ -215,19 +216,21 @@ final class CommandsTest extends IndexerTestBase
             array_keys($doc),
         );
         $this->assertSame(['zephyr-conversion-vectors', 1, 'proposal'], [$doc['format'], $doc['format_version'], $doc['status']]);
+        $this->assertCount(26, $doc['vectors']);
         $this->assertSame(['name' => 'zephyr', 'version' => '2.3.0', 'commit' => '3adbb517a'], $doc['daemon']);
         $this->assertSame(['name' => 'lateo-explorer', 'version' => 'rule-1', 'date' => '2027-01-15'], $doc['generator']);
         $this->assertSame(['coin' => '1000000000000', 'rounding_modulus' => '10000'], $doc['constants']);
-        // The first of each kind: five transactions of the seven.
+        // The first of each kind: five real transactions of the seven, then the synthetic negatives.
+        $real = array_slice($doc['vectors'], 0, 5);
         $this->assertSame(
             ['mainnet-120974-', 'mainnet-295006-', 'mainnet-400878-', 'mainnet-481502-', 'mainnet-905998-'],
-            array_map(static fn (array $v): string => preg_replace('/[0-9a-f]{12}\z/', '', $v['id']), $doc['vectors']),
+            array_map(static fn (array $v): string => preg_replace('/[0-9a-f]{12}\z/', '', $v['id']), $real),
         );
         $this->assertSame(
             ['REDEEM_RESERVE', 'MINT_RESERVE', 'MINT_YIELD', 'AUDIT_ZEPH', 'REDEEM_STABLE'],
-            array_column($doc['vectors'], 'tx_type'),
+            array_column($real, 'tx_type'),
         );
-        foreach ($doc['vectors'] as $v) {
+        foreach ($real as $v) {
             $this->assertSame(['id', 'source', 'hard_fork', 'block_height', 'pricing_record_height', 'tx_type', 'source_asset', 'dest_asset', 'amount_burnt', 'amount_minted'], array_slice(array_keys($v), 0, 10));
             $this->assertSame(['network' => 'mainnet', 'tx_hash' => $v['source']['tx_hash'], 'synthetic' => false], $v['source']);
             $this->assertSame(1, preg_match('/\A[0-9a-f]{64}\z/', $v['source']['tx_hash']));
@@ -251,7 +254,7 @@ final class CommandsTest extends IndexerTestBase
             }
         }
         // The redeem of block 905998 in full.
-        $v = $doc['vectors'][4];
+        $v = $real[4];
         $this->assertSame(['ZSD', 'ZPH', 11, 905998, 905996, '1000000000000000', '8566240310000000'], [$v['source_asset'], $v['dest_asset'], $v['hard_fork'], $v['block_height'], $v['pricing_record_height'], $v['amount_burnt'], $v['amount_minted']]);
         $this->assertSame('8574815130000', $v['pricing_record']['stable']);
         $this->assertSame('1995233720000', $v['pricing_record']['yield_price']);
@@ -260,7 +263,7 @@ final class CommandsTest extends IndexerTestBase
             $v['expected'],
         );
         // The audit has no record and no price.
-        $a = $doc['vectors'][3];
+        $a = $real[3];
         $this->assertSame(['ZEPH', 'ZPH', 0, false], [$a['source_asset'], $a['dest_asset'], $a['pricing_record_height'], array_key_exists('pricing_record', $a)]);
         $this->assertSame([null, null, null, '1000000000000', '0', '1000000000000'], [$a['expected']['age'], $a['expected']['price_field'], $a['expected']['price'], $a['expected']['rate_before_fee'], $a['expected']['fee'], $a['expected']['rate']]);
         $this->assertSame($a['amount_burnt'], $a['expected']['minted']);
@@ -321,10 +324,181 @@ final class CommandsTest extends IndexerTestBase
         // Two more audits and two more mint_reserve in later blocks of other hard forks do not displace the first ones:
         // here the first mint_reserve of hf 5 is block 295006 position of the lower index.
         $doc = $this->decode($this->vectors($this->db, false)[1]);
-        $mint = array_values(array_filter($doc['vectors'], static fn (array $v): bool => $v['tx_type'] === 'MINT_RESERVE'));
+        $mint = array_values(array_filter($doc['vectors'], static fn (array $v): bool => $v['tx_type'] === 'MINT_RESERVE' && !$v['source']['synthetic']));
         $this->assertCount(1, $mint);
         $first = $this->db->value("SELECT hash FROM transactions WHERE tx_type = 'mint_reserve' ORDER BY height, idx LIMIT 1");
         $this->assertSame($first, $mint[0]['source']['tx_hash']);
+    }
+
+    public function testTheSampleEndsWithTheSyntheticNegativesInTheirOrder(): void
+    {
+        $this->load($this->db);
+        $doc = $this->decode($this->vectors($this->db, false)[1]);
+        $vectors = $doc['vectors'];
+        $this->assertSame([1, 'proposal'], [$doc['format_version'], $doc['status']]);
+        $this->assertCount(26, $vectors);
+        foreach (array_slice($vectors, 0, 5) as $v) {
+            $this->assertSame(['network', 'tx_hash', 'synthetic'], array_keys($v['source']), 'a real entry has no mutation field');
+            $this->assertFalse($v['source']['synthetic']);
+        }
+        $synthetic = array_slice($vectors, 5);
+        $got = array_map(static fn (array $v): array => [$v['id'], $v['source']['mutation']], $synthetic);
+        $hashes = [];
+        foreach (array_slice($vectors, 0, 5) as $v) {
+            $hashes[$v['block_height']] = $v['source']['tx_hash'];
+        }
+        $prefix = static fn (int $h): string => 'synthetic-' . $h . '-' . substr($hashes[$h], 0, 12) . '-';
+        $expected = [];
+        foreach ([[120974, 'reserve_ma'], [295006, 'reserve_ma'], [400878, 'yield_price'], [905998, 'stable']] as [$h, $field]) {
+            foreach (['amount_minted plus 1', 'amount_minted minus 1', 'age 0', 'age 11', $field . ' zero'] as $i => $mutation) {
+                $expected[] = [$prefix($h) . ($i + 1), $mutation];
+            }
+        }
+        $expected[] = [$prefix(481502) . '1', 'amount_minted plus 1'];
+        $this->assertSame($expected, $got);
+        $this->assertSame(26 - 5, count(array_unique(array_column($synthetic, 'id'))));
+        foreach ($synthetic as $v) {
+            $this->assertTrue($v['source']['synthetic']);
+            $this->assertSame(['network', 'tx_hash', 'synthetic', 'mutation'], array_keys($v['source']));
+            $this->assertSame(1, preg_match('/\A[0-9a-f]{64}\z/', $v['source']['tx_hash']));
+            $this->assertSame(['pr_complete', 'age', 'age_valid', 'price_field', 'price', 'rate_before_fee', 'fee', 'rate', 'minted', 'remainder', 'valid'], array_keys($v['expected']));
+            $this->assertFalse($v['expected']['valid'], $v['id']);
+        }
+        $this->assertSame(
+            0,
+            count(array_filter($synthetic, static fn (array $v): bool => $v['source']['mutation'] === 'hard fork 5 rule on a hard fork 6 block')),
+            'the fee of a stable or reserve conversion is the same in hard fork 5 and 6, so that mutation does not change the result and is left out',
+        );
+        // --all writes real entries only.
+        $all = $this->decode($this->vectors($this->db, true)[1])['vectors'];
+        $this->assertCount(7, $all);
+        foreach ($all as $v) {
+            $this->assertFalse($v['source']['synthetic']);
+            $this->assertFalse(array_key_exists('mutation', $v['source']));
+        }
+    }
+
+    public function testASyntheticVectorIsTheRuleOnAChangedCopyOfTheRealEntry(): void
+    {
+        $this->load($this->db);
+        $vectors = $this->decode($this->vectors($this->db, false)[1])['vectors'];
+        $real = $vectors[4]; // the redeem of block 905998
+        $by = [];
+        foreach (array_slice($vectors, 5) as $v) {
+            if ($v['block_height'] === 905998) {
+                $by[$v['source']['mutation']] = $v;
+            }
+        }
+        $this->assertSame(['amount_minted plus 1', 'amount_minted minus 1', 'age 0', 'age 11', 'stable zero'], array_keys($by));
+        $notRecomputed = static fn (bool $complete, int $age, bool $ageValid): array => [
+            'pr_complete' => $complete, 'age' => $age, 'age_valid' => $ageValid,
+            'price_field' => null, 'price' => null, 'rate_before_fee' => null, 'fee' => null, 'rate' => null,
+            'minted' => null, 'remainder' => null, 'valid' => false,
+        ];
+
+        $plus = $by['amount_minted plus 1'];
+        $this->assertSame('8566240310000001', $plus['amount_minted']);
+        $this->assertSame($real['expected']['minted'], $plus['expected']['minted'], 'what the rule gives does not follow the changed amount');
+        $this->assertSame([false, 2, true, true], [$plus['expected']['valid'], $plus['expected']['age'], $plus['expected']['age_valid'], $plus['expected']['pr_complete']]);
+        $this->assertSame($real['pricing_record'], $plus['pricing_record']);
+        $this->assertSame('8566240309999999', $by['amount_minted minus 1']['amount_minted']);
+
+        $zero = $by['age 0'];
+        $this->assertSame([905998, 0], [$zero['pricing_record_height'], $zero['expected']['age']]);
+        $this->assertSame($notRecomputed(true, 0, false), $zero['expected']);
+        $eleven = $by['age 11'];
+        $this->assertSame([905987, 11], [$eleven['pricing_record_height'], $eleven['expected']['age']]);
+        $this->assertSame($notRecomputed(true, 11, false), $eleven['expected']);
+
+        $stable = $by['stable zero'];
+        $this->assertSame('0', $stable['pricing_record']['stable']);
+        $this->assertSame(array_keys($real['pricing_record']), array_keys($stable['pricing_record']), 'the fields keep their order');
+        $this->assertSame($notRecomputed(false, 2, true), $stable['expected']);
+
+        // The audit: only the amount changes; the rule still gives the amount of the chain.
+        $audit = array_values(array_filter(array_slice($vectors, 5), static fn (array $v): bool => $v['tx_type'] === 'AUDIT_ZEPH'));
+        $this->assertCount(1, $audit);
+        $this->assertSame(['amount_minted plus 1', false, null, true], [$audit[0]['source']['mutation'], $audit[0]['expected']['valid'], $audit[0]['expected']['age'], $audit[0]['expected']['age_valid']]);
+        $this->assertSame($vectors[3]['expected']['minted'], $audit[0]['expected']['minted']);
+        $this->assertFalse(array_key_exists('pricing_record', $audit[0]));
+    }
+
+    public function testTheNegativesAreTheSameEveryTime(): void
+    {
+        $this->load($this->db);
+        $this->assertSame($this->vectors($this->db, false), $this->vectors($this->db, false));
+    }
+
+    // --- shapes -------------------------------------------------------------------------------
+
+    /** @return array{0:int,1:string,2:string} */
+    private function shapes(Database $db): array
+    {
+        $out = fopen('php://memory', 'w+');
+        $err = fopen('php://memory', 'w+');
+        $code = (new ShapesApplication(static fn () => $db, $out, $err))->run();
+        rewind($out);
+        rewind($err);
+        return [$code, (string) stream_get_contents($out), (string) stream_get_contents($err)];
+    }
+
+    public function testShapesPrintsCountsPerVersionAndTypeAndNeverAHash(): void
+    {
+        $this->load($this->db);
+        // Two blocks of the load have a miner row from the indexer; give the 905998 block one by hand and
+        // mark one transaction as stored by version 2 code and one with an untagged output.
+        $this->db->exec('UPDATE transactions SET n_untagged_outputs = NULL WHERE height = 905998');
+        $this->db->exec('UPDATE transactions SET n_untagged_outputs = 2 WHERE height = 481502 AND idx = 0');
+        $this->db->exec('UPDATE miner_txs SET n_untagged_outputs = 1 WHERE height = 295006');
+        $before = [$this->db->all('SELECT * FROM transactions ORDER BY hash'), $this->db->all('SELECT * FROM miner_txs ORDER BY height')];
+
+        [$code, $out, $err] = $this->shapes($this->db);
+        $this->assertSame([0, ''], [$code, $err]);
+        $this->assertSame(0, preg_match('/[0-9a-f]{64}/', $out), 'no hash is printed');
+        $total = $this->count('transactions');
+        $this->assertStringContains("shapes: schema version 3, transactions stored up to height 905998\n", $out);
+        $this->assertStringContains("transactions by version and rct_type:\n", $out);
+        $perType = $this->db->all('SELECT version, rct_type, count(*) AS n, min(height) AS l, max(height) AS h FROM transactions GROUP BY version, rct_type ORDER BY version, rct_type');
+        $this->assertTrue(count($perType) >= 1);
+        foreach ($perType as $r) {
+            $this->assertStringContains(sprintf("  version=%d rct_type=%d: count=%d lowest=%d highest=%d\n", $r['version'], $r['rct_type'], $r['n'], $r['l'], $r['h']), $out);
+        }
+        $this->assertSame($total, array_sum(array_column($perType, 'n')));
+        $this->assertStringContains("miner transactions by version and rct_type:\n  version=3 rct_type=0: count=4 lowest=120974 highest=481502\n", $out);
+        $this->assertStringContains("transactions with outputs of another variant than tagged_key: count=1 lowest=481502 highest=481502\n", $out);
+        $this->assertStringContains("miner transactions with outputs of another variant than tagged_key: count=1 lowest=295006 highest=295006\n", $out);
+        $this->assertStringContains("transactions with n_untagged_outputs NULL (stored before schema 3): count=1 lowest=905998 highest=905998\n", $out);
+        $this->assertStringContains("miner transactions with n_untagged_outputs NULL: count=0\n", $out);
+        $this->assertSame($before, [$this->db->all('SELECT * FROM transactions ORDER BY hash'), $this->db->all('SELECT * FROM miner_txs ORDER BY height')], 'read-only');
+    }
+
+    public function testShapesOnAnEmptyDatabaseAndOnAnOlderOne(): void
+    {
+        [$code, $out, $err] = $this->shapes($this->db);
+        $this->assertSame([0, ''], [$code, $err]);
+        $this->assertStringContains("transactions by version and rct_type:\n  none\n", $out);
+        $this->assertStringContains("transactions stored up to height -\n", $out);
+        $this->assertStringContains("miner transactions with outputs of another variant than tagged_key: count=0\n", $out);
+
+        $old = Database::memory();
+        $migrations = Schema::migrations();
+        Schema::migrate($old, [1 => $migrations[1], 2 => $migrations[2]]);
+        [$code, $out, $err] = $this->shapes($old);
+        $this->assertSame([1, ''], [$code, $out]);
+        $this->assertStringContains('schema version 2, not 3', $err);
+
+        $bare = Database::memory();
+        [$code, $out, $err] = $this->shapes($bare);
+        $this->assertSame([1, ''], [$code, $out]);
+        $this->assertStringContains('schema version 0', $err);
+
+        $err = fopen('php://memory', 'w+');
+        $code = (new ShapesApplication(static function (): Database {
+            throw new \RuntimeException('database cannot be opened');
+        }, fopen('php://memory', 'w+'), $err))->run();
+        rewind($err);
+        $this->assertSame(1, $code);
+        $this->assertSame("shapes: stopped: database cannot be opened\n", stream_get_contents($err));
     }
 
     // --- the scripts as processes -------------------------------------------------------------
@@ -374,11 +548,21 @@ final class CommandsTest extends IndexerTestBase
         $this->assertCount(7, $this->decode($out)['vectors']);
         [$code, $out] = $this->process('vectors.php', '--settings=' . $settings);
         $this->assertSame(0, $code);
-        $this->assertCount(5, $this->decode($out)['vectors']);
+        $this->assertCount(5 + 21, $this->decode($out)['vectors'], 'five real and the synthetic negatives');
         [$code, , $err] = $this->process('vectors.php', '--settings=' . $settings, '--all', '--sample');
         $this->assertSame(1, $code);
         $this->assertStringContains('usage:', $err);
         [$code] = $this->process('vectors.php');
+        $this->assertSame(1, $code);
+
+        [$code, $out, $err] = $this->process('shapes.php', '--settings=' . $settings);
+        $this->assertSame([0, ''], [$code, $err]);
+        $this->assertStringContains('shapes: schema version 3, transactions stored up to height 905998', $out);
+        $this->assertSame(0, preg_match('/[0-9a-f]{64}/', $out));
+        [$code, , $err] = $this->process('shapes.php', '--settings=' . $settings, '--all');
+        $this->assertSame(1, $code);
+        $this->assertStringContains('usage:', $err);
+        [$code] = $this->process('shapes.php');
         $this->assertSame(1, $code);
 
         [$code, $out, $err] = $this->process('recompute.php', '--settings=' . $settings);
