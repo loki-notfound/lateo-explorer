@@ -8,10 +8,10 @@ namespace Lateo\Explorer\Chain;
  * The recomputation of a conversion from its pricing record, without keys and without I/O.
  *
  * All arithmetic is exact (GMP): COIN = 10^12, R = 10^24, nothing is limited to a fixed width.
- * Given the type of the transaction, the hard fork of its block (the block's major_version),
- * the height of that block, the pricing_record_height and the burnt and minted amounts of the
- * transaction and the stored pricing record at that height (nine fields, or null), check()
- * gives a verdict:
+ * Given the type of the transaction, the generation of the names of its source and destination
+ * asset, the hard fork of its block (the block's major_version), the height of that block, the
+ * pricing_record_height and the burnt and minted amounts of the transaction and the stored
+ * pricing record at that height (nine fields, or null), check() gives a verdict:
  *
  *   r0 (before the fee) by type, with the record's fields:
  *     mint_stable    R / max(stable, stable_ma)        redeem_stable   min(stable, stable_ma)
@@ -27,12 +27,31 @@ namespace Lateo\Explorer\Chain;
  *   expected = (burnt * rate) / COIN (rounded down), remainder = (burnt * rate) mod COIN
  *   match <=> expected == minted
  *
- * Conditions of admission, none of them a mismatch (verdict not_recomputed with a reason):
- * the type is unknown, a transfer carries conversion fields, the type is not allowed in that
- * hard fork, the age (height - pricing_record_height) is not 1 to 10, the record is missing,
- * the record lacks a rate the hard fork needs (pricing_record.cpp has_missing_rates), or a
- * value cannot be handled at all. They are tested in that order. check() never throws on
- * values from the chain.
+ * Conditions of admission, none of them a mismatch (verdict not_recomputed with a reason, and
+ * no computed number). They are tested in this order, the daemon's own order where it has one
+ * (blockchain.cpp handle_block_to_main_chain, tx_pool.cpp add_tx):
+ *   1. a value cannot be handled at all, or an amount or the record height does not fit 64
+ *      bits (amounts and record fields are uint64 in the daemon): invalid_value
+ *   2. the type is unknown: unknown_type; a transfer carries conversion fields:
+ *      transfer_with_conversion_fields
+ *   3. the hard fork is above the highest one the rule knows (MAX_HARD_FORK; hardforks.cpp
+ *      lists 1 to 11 and HardFork::check refuses a block above them), the type is not allowed
+ *      in that hard fork (get_tx_type with the audit and conversion checks of blockchain.cpp,
+ *      tx_pool.cpp and cryptonote_core.cpp), or a name of the wrong generation is used for
+ *      the hard fork (Blockchain::check_tx_outputs: no new name before hard fork 8, no old
+ *      name from hard fork 11): type_not_allowed
+ *   4. an audit: a pricing_record_height other than 0 (blockchain.cpp and tx_pool.cpp refuse
+ *      a pricing_record_height on any transaction that is not a conversion): invalid_value
+ *   5. a conversion: the age (height - pricing_record_height) is not 1 to 10, with
+ *      tx_pr_height_valid computing height - 10 in unsigned arithmetic, so that no record
+ *      height is accepted below block height 10: age_out_of_window
+ *   6. a conversion: the record is missing (pr_missing), lacks a rate the hard fork needs
+ *      (pricing_record.cpp has_missing_rates; pr_incomplete), or has a field that cannot be
+ *      handled (invalid_value)
+ *   7. amount_burnt or amount_minted is zero (tx_pool.cpp for every conversion, rctSigs.cpp
+ *      verRctSemanticsZeph for conversions and audits from hard fork 6): invalid_value
+ *   8. the exact computed amount does not fit 64 bits: invalid_value
+ * check() never throws on values from the chain.
  *
  * The rule was read against the daemon 2.3.0 (ringct/rctSigs.cpp: verRctSemanticsZeph from
  * hard fork 6, validateMintedAmount for hard forks 3 to 5; oracle/pricing_record.cpp
@@ -42,13 +61,21 @@ namespace Lateo\Explorer\Chain;
 final class ConversionRule
 {
     /** Bumped when the rule or the list of reasons changes in meaning. */
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     public const COIN = '1000000000000';
     public const RESERVE_NUMERATOR = '1000000000000000000000000'; // 10^24
     public const ROUNDING_MODULUS = '10000';
     public const MIN_AGE = 1;
     public const MAX_AGE = 10;
+    /** The highest hard fork the rule knows (the daemon's hardforks.cpp lists 1 to 11). */
+    public const MAX_HARD_FORK = 11;
+    /** The first hard fork that has the new names ZPH, ZSD, ZRS, ZYS (HF_VERSION_AUDIT). */
+    public const FIRST_NEW_NAME_FORK = 8;
+    /** The first hard fork that refuses the old names ZEPH, ZEPHUSD, ZEPHRSV, ZYIELD (HF_VERSION_V11). */
+    public const FIRST_NO_OLD_NAME_FORK = 11;
+    /** 2^64, the first value that does not fit the daemon's uint64 amounts. */
+    public const UINT64_LIMIT = '18446744073709551616';
 
     public const CHECKED = 'checked';
     public const REASONS = [
@@ -106,6 +133,42 @@ final class ConversionRule
     }
 
     /**
+     * Whether the names of the source and destination asset may be written in this hard fork
+     * (Blockchain::check_tx_outputs): the new names not before hard fork 8, the old names not
+     * from hard fork 11. In hard forks 8 to 10 both are allowed (an audit goes from an old
+     * name to a new one). A name the chain does not know is never allowed.
+     */
+    public static function namesAllowed(Generation $source, Generation $destination, int $hardFork): bool
+    {
+        foreach ([$source, $destination] as $generation) {
+            if ($generation === Generation::Unknown) {
+                return false;
+            }
+            if ($generation === Generation::New && $hardFork < self::FIRST_NEW_NAME_FORK) {
+                return false;
+            }
+            if ($generation === Generation::Old && $hardFork >= self::FIRST_NO_OLD_NAME_FORK) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether the age window of tx_pr_height_valid holds: the record height is below the block
+     * height and not more than 10 below it, and, because the daemon computes height - 10 in
+     * unsigned arithmetic, never when the block height is below 10.
+     */
+    public static function ageValid(int $height, int $pricingRecordHeight): bool
+    {
+        if ($height < self::MAX_AGE) {
+            return false;
+        }
+        $age = $height - $pricingRecordHeight;
+        return $age >= self::MIN_AGE && $age <= self::MAX_AGE;
+    }
+
+    /**
      * Whether the record has every rate the hard fork needs (has_missing_rates is false).
      *
      * @param array<string,int|string> $record
@@ -142,11 +205,14 @@ final class ConversionRule
         int|string $amountBurnt,
         int|string $amountMinted,
         ?array $record,
+        Generation $sourceGeneration,
+        Generation $destinationGeneration,
     ): ConversionResult {
         $burnt = self::number($amountBurnt);
         $minted = self::number($amountMinted);
         $prh = self::number($pricingRecordHeight);
-        if ($burnt === null || $minted === null || $prh === null || $height < 0) {
+        if ($burnt === null || $minted === null || $prh === null || $height < 0
+            || self::tooBig($burnt) || self::tooBig($minted) || self::tooBig($prh)) {
             return self::not('invalid_value');
         }
         if ($type === 'unknown' || !in_array($type, [...self::CONVERSIONS, 'audit', 'transfer'], true)) {
@@ -156,15 +222,20 @@ final class ConversionRule
             // Only a transfer with something in the conversion fields gets here.
             return self::not('transfer_with_conversion_fields');
         }
-        if (!self::allowed($type, $hardFork)) {
+        if ($hardFork > self::MAX_HARD_FORK
+            || !self::allowed($type, $hardFork)
+            || !self::namesAllowed($sourceGeneration, $destinationGeneration, $hardFork)) {
             return self::not('type_not_allowed');
         }
         if ($type === 'audit') {
+            if (gmp_cmp($prh, 0) !== 0 || gmp_cmp($burnt, 0) === 0 || gmp_cmp($minted, 0) === 0) {
+                return self::not('invalid_value');
+            }
             return self::finish($burnt, $minted, gmp_init(self::COIN), gmp_init(0), null, null);
         }
 
         $age = gmp_sub($height, $prh);
-        if (gmp_cmp($age, self::MIN_AGE) < 0 || gmp_cmp($age, self::MAX_AGE) > 0) {
+        if ($height < self::MAX_AGE || gmp_cmp($age, self::MIN_AGE) < 0 || gmp_cmp($age, self::MAX_AGE) > 0) {
             return self::not('age_out_of_window');
         }
         if ($record === null) {
@@ -173,13 +244,16 @@ final class ConversionRule
         $values = [];
         foreach (self::RECORD_FIELDS as $field) {
             $v = self::number($record[$field] ?? null);
-            if ($v === null) {
+            if ($v === null || self::tooBig($v)) {
                 return self::not('invalid_value');
             }
             $values[$field] = $v;
         }
         if (!self::recordComplete($record, $hardFork)) {
             return self::not('pr_incomplete');
+        }
+        if (gmp_cmp($burnt, 0) === 0 || gmp_cmp($minted, 0) === 0) {
+            return self::not('invalid_value');
         }
 
         $reserveNumerator = gmp_init(self::RESERVE_NUMERATOR);
@@ -254,6 +328,9 @@ final class ConversionRule
         $rate = gmp_sub($rate, gmp_mod($rate, self::ROUNDING_MODULUS));
         $product = gmp_mul($burnt, $rate);
         [$expected, $remainder] = gmp_div_qr($product, self::COIN);
+        if (self::tooBig($expected)) {
+            return self::not('invalid_value');
+        }
         return new ConversionResult(
             gmp_cmp($expected, $minted) === 0 ? ConversionResult::MATCH : ConversionResult::MISMATCH,
             self::CHECKED,
@@ -265,6 +342,12 @@ final class ConversionRule
             gmp_strval($expected),
             gmp_strval($remainder),
         );
+    }
+
+    /** Whether a number does not fit 64 bits. */
+    private static function tooBig(\GMP $value): bool
+    {
+        return gmp_cmp($value, self::UINT64_LIMIT) >= 0;
     }
 
     private static function not(string $reason): ConversionResult

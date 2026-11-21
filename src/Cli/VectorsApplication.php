@@ -36,7 +36,7 @@ use Lateo\Explorer\Support\Clock;
  * price_field, price, rate_before_fee, fee, rate, minted and remainder, valid is false, and
  * pr_complete, age and age_valid are the true values. --all writes real entries only.
  *
- * @phpstan-type Inputs array{hash:string,height:int,type:string,audit:bool,ticker:string,hard_fork:int,prh:int,burnt:string,minted:string,source:string,dest:string,record:array<string,int>|null,price_field:?string,result:ConversionResult}
+ * @phpstan-type Inputs array{hash:string,height:int,type:string,audit:bool,ticker:string,dest_ticker:string,source_gen:Generation,dest_gen:Generation,hard_fork:int,prh:int,burnt:string,minted:string,source:string,dest:string,record:array<string,int>|null,price_field:?string,result:ConversionResult}
  */
 final class VectorsApplication
 {
@@ -238,6 +238,9 @@ final class VectorsApplication
             'type' => $type,
             'audit' => $audit,
             'ticker' => (string) $r['source_asset'],
+            'dest_ticker' => (string) $r['dest_asset'],
+            'source_gen' => Generation::from((string) $r['source_gen']),
+            'dest_gen' => Generation::from((string) $r['dest_gen']),
             'hard_fork' => (int) $r['major_version'],
             'prh' => $prh,
             'burnt' => (string) $r['amount_burnt'],
@@ -296,7 +299,7 @@ final class VectorsApplication
         $vector['expected'] = [
             'pr_complete' => $audit || ($in['record'] !== null && ConversionRule::recordComplete($in['record'], $in['hard_fork'])),
             'age' => $audit ? null : $age,
-            'age_valid' => $audit || ($age >= ConversionRule::MIN_AGE && $age <= ConversionRule::MAX_AGE),
+            'age_valid' => $audit || ConversionRule::ageValid($height, $in['prh']),
             'price_field' => $result->priceField,
             'price' => $result->price,
             'rate_before_fee' => $result->r0,
@@ -379,7 +382,14 @@ final class VectorsApplication
         }
         if (RecomputeApplication::regime($in['type'], $in['hard_fork']) === 'hf >=6'
             && in_array($in['type'], ['mint_stable', 'redeem_stable', 'mint_reserve', 'redeem_reserve'], true)) {
-            $older = ['hard_fork' => 5] + $in;
+            // The hard fork 5 rule only knows the old names: the copy is written with them.
+            $older = [
+                'hard_fork' => 5,
+                'source_gen' => Generation::Old,
+                'dest_gen' => Generation::Old,
+                'source' => (new Asset($in['ticker'], Generation::Old))->chainName(),
+                'dest' => (new Asset($in['dest_ticker'], Generation::Old))->chainName(),
+            ] + $in;
             $result = $this->rule($older);
             if ($result->isChecked() && $result->expected !== $in['minted']) {
                 $out[] = ['hard fork 5 rule on a hard fork 6 block', $older];
@@ -414,6 +424,8 @@ final class VectorsApplication
             $in['burnt'],
             $in['minted'],
             $in['audit'] ? null : $in['record'],
+            $in['source_gen'],
+            $in['dest_gen'],
         );
     }
 

@@ -95,6 +95,7 @@ final class TransactionStore
             $counts = (new ConversionCheckStore($this->db))->checkAndStore(array_map(
                 static fn (Transaction $t): array => [
                     'hash' => $t->hash, 'height' => $t->height, 'type' => $t->type,
+                    'source_gen' => $t->source->generation, 'dest_gen' => $t->destination->generation,
                     'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => $t->pricingRecordHeight,
                 ],
                 $rows,

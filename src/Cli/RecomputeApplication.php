@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Lateo\Explorer\Cli;
 
 use Lateo\Explorer\Chain\ConversionRule;
+use Lateo\Explorer\Chain\Generation;
 use Lateo\Explorer\Config\Config;
 use Lateo\Explorer\Db\ConversionCheckStore;
 use Lateo\Explorer\Db\Database;
@@ -74,7 +75,7 @@ final class RecomputeApplication
         $after = [-1, -1];
         while (true) {
             $rows = $db->all(
-                "SELECT t.hash, t.height, t.idx, t.tx_type, t.amount_burnt, t.amount_minted, t.pricing_record_height
+                "SELECT t.hash, t.height, t.idx, t.tx_type, t.source_gen, t.dest_gen, t.amount_burnt, t.amount_minted, t.pricing_record_height
                  FROM transactions t
                  WHERE $needs AND (t.height > ? OR (t.height = ? AND t.idx > ?))
                  ORDER BY t.height, t.idx LIMIT ?",
@@ -87,6 +88,8 @@ final class RecomputeApplication
             foreach ($rows as $r) {
                 $txs[] = [
                     'hash' => (string) $r['hash'], 'height' => (int) $r['height'], 'type' => (string) $r['tx_type'],
+                    'source_gen' => Generation::from((string) $r['source_gen']),
+                    'dest_gen' => Generation::from((string) $r['dest_gen']),
                     'burnt' => (int) $r['amount_burnt'], 'minted' => (int) $r['amount_minted'],
                     'prh' => (int) $r['pricing_record_height'],
                 ];

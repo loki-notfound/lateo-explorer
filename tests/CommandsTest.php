@@ -104,7 +104,7 @@ final class CommandsTest extends IndexerTestBase
         [$code, $out, $err] = $this->recompute($this->db);
         $this->assertSame([0, ''], [$code, $err], $out);
         $this->assertSame($before, $this->db->all('SELECT * FROM conversion_checks ORDER BY tx_hash'), 'refilled from the other tables');
-        $this->assertStringContains('recompute: rule version 1, 7 checks', $out);
+        $this->assertStringContains('recompute: rule version 2, 7 checks', $out);
         $this->assertStringContains('redeem_reserve  hf 3-4: match=1 mismatch=0 nonzero_remainders=0', $out);
         $this->assertStringContains('mint_reserve    hf 5: match=2 mismatch=0 nonzero_remainders=0', $out);
         $this->assertStringContains('mint_yield      hf >=6: match=1 mismatch=0 nonzero_remainders=0', $out);
@@ -218,7 +218,7 @@ final class CommandsTest extends IndexerTestBase
         $this->assertSame(['zephyr-conversion-vectors', 1, 'proposal'], [$doc['format'], $doc['format_version'], $doc['status']]);
         $this->assertCount(26, $doc['vectors']);
         $this->assertSame(['name' => 'zephyr', 'version' => '2.3.0', 'commit' => '3adbb517a'], $doc['daemon']);
-        $this->assertSame(['name' => 'lateo-explorer', 'version' => 'rule-1', 'date' => '2027-01-15'], $doc['generator']);
+        $this->assertSame(['name' => 'lateo-explorer', 'version' => 'rule-2', 'date' => '2027-01-15'], $doc['generator']);
         $this->assertSame(['coin' => '1000000000000', 'rounding_modulus' => '10000'], $doc['constants']);
         // The first of each kind: five real transactions of the seven, then the synthetic negatives.
         $real = array_slice($doc['vectors'], 0, 5);

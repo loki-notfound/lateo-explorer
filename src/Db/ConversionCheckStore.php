@@ -6,6 +6,7 @@ namespace Lateo\Explorer\Db;
 
 use Lateo\Explorer\Chain\ConversionResult;
 use Lateo\Explorer\Chain\ConversionRule;
+use Lateo\Explorer\Chain\Generation;
 
 /**
  * Computes the conversion checks of stored transactions and keeps them in conversion_checks.
@@ -32,7 +33,7 @@ final class ConversionCheckStore
     /**
      * Check and store the given transactions (those that need a check; others are ignored).
      *
-     * @param list<array{hash:string,height:int,type:string,burnt:int,minted:int,prh:int}> $txs
+     * @param list<array{hash:string,height:int,type:string,source_gen:Generation,dest_gen:Generation,burnt:int,minted:int,prh:int}> $txs
      * @return array{checks:int,match:int,mismatch:int,not_recomputed:int}
      */
     public function checkAndStore(array $txs): array
@@ -56,6 +57,8 @@ final class ConversionCheckStore
                 $tx['burnt'],
                 $tx['minted'],
                 $tx['type'] === 'audit' ? null : $this->record($tx['prh']),
+                $tx['source_gen'],
+                $tx['dest_gen'],
             );
             $this->insert($tx['hash'], $tx['height'], $fork, $result);
             $counts['checks']++;

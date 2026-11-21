@@ -6,6 +6,7 @@ namespace Lateo\Explorer\Tests;
 
 use Lateo\Explorer\Chain\Asset;
 use Lateo\Explorer\Chain\ConversionRule;
+use Lateo\Explorer\Chain\Generation;
 use Lateo\Explorer\Db\ConversionCheckStore;
 use Lateo\Explorer\Db\Database;
 use Lateo\Explorer\Db\Schema;
@@ -273,7 +274,7 @@ final class ConversionChecksTest extends IndexerTestBase
         $this->db->exec('UPDATE pricing_records SET yield_price = 0 WHERE height = 905996');
         $this->db->transaction(fn () => (new ConversionCheckStore($this->db))->clear());
         $this->db->transaction(fn () => (new ConversionCheckStore($this->db))->checkAndStore([[
-            'hash' => $t->hash, 'height' => 905998, 'type' => $t->type, 'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => 905996,
+            'hash' => $t->hash, 'height' => 905998, 'type' => $t->type, 'source_gen' => $t->source->generation, 'dest_gen' => $t->destination->generation, 'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => 905996,
         ]]));
         $this->assertSame(['not_recomputed', 'pr_incomplete'], [$this->db->value('SELECT verdict FROM conversion_checks'), $this->db->value('SELECT reason FROM conversion_checks')]);
     }
@@ -318,7 +319,7 @@ final class ConversionChecksTest extends IndexerTestBase
         $this->assertSame(0, $this->count('conversion_checks'));
         $t = $this->fixtureTx905998();
         $this->db->transaction(static fn () => $store->checkAndStore([[
-            'hash' => $t->hash, 'height' => 905998, 'type' => $t->type, 'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => 905996,
+            'hash' => $t->hash, 'height' => 905998, 'type' => $t->type, 'source_gen' => $t->source->generation, 'dest_gen' => $t->destination->generation, 'burnt' => $t->amountBurnt, 'minted' => $t->amountMinted, 'prh' => 905996,
         ]]));
         $this->assertSame($before, $this->db->all('SELECT * FROM conversion_checks'));
     }
@@ -326,7 +327,7 @@ final class ConversionChecksTest extends IndexerTestBase
     public function testAConversionWithoutAStoredBlockIsALogicError(): void
     {
         $this->assertThrows(\LogicException::class, fn () => (new ConversionCheckStore($this->db))->checkAndStore([[
-            'hash' => str_repeat('a', 64), 'height' => 5, 'type' => 'redeem_stable', 'burnt' => 1, 'minted' => 1, 'prh' => 4,
+            'hash' => str_repeat('a', 64), 'height' => 5, 'type' => 'redeem_stable', 'source_gen' => Generation::New, 'dest_gen' => Generation::New, 'burnt' => 1, 'minted' => 1, 'prh' => 4,
         ]]));
     }
 
