@@ -14,9 +14,9 @@ use Lateo\Explorer\Support\Clock;
 /**
  * bin/vectors.php: writes the conversion vectors of the database as JSON to standard output.
  *
- * The format is the proposal of the step 4c research (format "zephyr-conversion-vectors",
- * format_version 1, marked "status": "proposal" until it is agreed with the library that reads
- * it). It reads only the database, through a read-only connection. Amounts, prices, rates and
+ * The format is "zephyr-conversion-vectors", format_version 1, with "status": "agreed": it was
+ * agreed on 2026-11-21 with the library that reads it, with the rule as version 2 states it and
+ * one form for refusals (the computed fields null, valid false). It reads only the database, through a read-only connection. Amounts, prices, rates and
  * every field of a pricing record are decimal strings (they can pass 2^53); heights, the
  * hard fork and the age are JSON numbers. Only checked transactions (match or mismatch) are
  * written, never one that was not recomputed.
@@ -92,7 +92,7 @@ final class VectorsApplication
         $out = "{\n";
         $out .= '  "format": ' . self::json(self::FORMAT) . ",\n";
         $out .= '  "format_version": ' . self::FORMAT_VERSION . ",\n";
-        $out .= '  "status": "proposal",' . "\n";
+        $out .= '  "status": "agreed",' . "\n";
         $out .= '  "daemon": ' . self::json(['name' => 'zephyr', 'version' => self::DAEMON_VERSION, 'commit' => self::DAEMON_COMMIT], 2) . ",\n";
         $out .= '  "generator": ' . self::json($generator, 2) . ",\n";
         $out .= '  "constants": ' . self::json(['coin' => ConversionRule::COIN, 'rounding_modulus' => ConversionRule::ROUNDING_MODULUS], 2) . ",\n";

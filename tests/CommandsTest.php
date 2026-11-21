@@ -215,7 +215,7 @@ final class CommandsTest extends IndexerTestBase
             ['format', 'format_version', 'status', 'daemon', 'generator', 'constants', 'vectors'],
             array_keys($doc),
         );
-        $this->assertSame(['zephyr-conversion-vectors', 1, 'proposal'], [$doc['format'], $doc['format_version'], $doc['status']]);
+        $this->assertSame(['zephyr-conversion-vectors', 1, 'agreed'], [$doc['format'], $doc['format_version'], $doc['status']]);
         $this->assertCount(26, $doc['vectors']);
         $this->assertSame(['name' => 'zephyr', 'version' => '2.3.0', 'commit' => '3adbb517a'], $doc['daemon']);
         $this->assertSame(['name' => 'lateo-explorer', 'version' => 'rule-2', 'date' => '2027-01-15'], $doc['generator']);
@@ -335,7 +335,7 @@ final class CommandsTest extends IndexerTestBase
         $this->load($this->db);
         $doc = $this->decode($this->vectors($this->db, false)[1]);
         $vectors = $doc['vectors'];
-        $this->assertSame([1, 'proposal'], [$doc['format_version'], $doc['status']]);
+        $this->assertSame([1, 'agreed'], [$doc['format_version'], $doc['status']]);
         $this->assertCount(26, $vectors);
         foreach (array_slice($vectors, 0, 5) as $v) {
             $this->assertSame(['network', 'tx_hash', 'synthetic'], array_keys($v['source']), 'a real entry has no mutation field');
